@@ -21,7 +21,7 @@ from gui.theme import (
 )
 
 
-class ResultadosView(ctk.CTkFrame):
+class ResultsView(ctk.CTkFrame):
     """Credential results table with search and reveal."""
 
     COLS = ("Navegador", "Perfil", "URL", "Usuario", "Contraseña")

@@ -21,7 +21,7 @@ from gui.theme import (
 )
 
 
-class AuditoriaView(ctk.CTkFrame):
+class AuditView(ctk.CTkFrame):
     """Main audit control panel."""
 
     BROWSERS = ["Todos", "Chrome", "Edge", "Brave", "Vivaldi", "Opera", "Opera GX"]

@@ -21,7 +21,7 @@ from gui.theme import (
 )
 
 
-class MantenimientoView(ctk.CTkFrame):
+class MaintenanceView(ctk.CTkFrame):
     """System health and maintenance panel."""
 
     def __init__(self, parent):
@@ -47,11 +47,9 @@ class MantenimientoView(ctk.CTkFrame):
         dep_inner = ctk.CTkFrame(dep_card, fg_color="transparent")
         dep_inner.pack(fill="x", padx=PAD["md"], pady=PAD["md"])
 
-        # Split into two columns: Status vs Log Console
         split = ctk.CTkFrame(dep_inner, fg_color="transparent")
         split.pack(fill="x")
 
-        # Left Column: Dependency List
         left_col = ctk.CTkFrame(split, fg_color="transparent")
         left_col.pack(side="left", fill="y", padx=(0, PAD["md"]))
 
@@ -84,7 +82,6 @@ class MantenimientoView(ctk.CTkFrame):
         make_button(self._dep_actions, "🔄 Re-verificar", command=self._check_deps, style="secondary", width=140).pack(side="left", padx=(0, PAD["sm"]))
         self._repair_btn = make_button(self._dep_actions, "🔧 Reparar Entorno", command=self._install_missing, style="primary", width=160)
         
-        # Right Column: Mini Console for logs
         right_col = ctk.CTkFrame(split, fg_color=COLORS["bg_input"], corner_radius=8, border_width=1, border_color=COLORS["border"])
         right_col.pack(side="left", fill="both", expand=True)
 
@@ -141,7 +138,7 @@ class MantenimientoView(ctk.CTkFrame):
             log_card,
             fg_color=COLORS["bg_input"],
             text_color=COLORS["text_primary"],
-            font=FONTS["mono_sm"],
+            font=FONTS["code"],
             corner_radius=8,
             border_width=0,
             state="disabled",
@@ -185,7 +182,6 @@ class MantenimientoView(ctk.CTkFrame):
                         text_color=COLORS["success"] if o else COLORS["danger"],
                     ))
             
-            # Show/hide repair button
             if self._missing_deps:
                 self.after(0, lambda: self._repair_btn.pack(side="left"))
                 self.after(0, lambda: self._log_dep(f"⚠ Faltan dependencias: {', '.join(self._missing_deps)}"))
@@ -245,19 +241,12 @@ class MantenimientoView(ctk.CTkFrame):
         self._dir_count_badge.configure(text=f"  {len(files)} archivos  ")
 
     def _clean_audits(self):
-        """Borra todos los archivos de reporte en el directorio de auditoría."""
         d = self._audit_dir or Path(".audit")
-        if not d.exists():
-            return
-        
-        # Iterar sobre todos los archivos para una limpieza profunda
+        if not d.exists(): return
         for f in d.iterdir():
             if f.is_file():
-                try:
-                    f.unlink(missing_ok=True)
-                except Exception:
-                    pass
-        
+                try: f.unlink(missing_ok=True)
+                except Exception: pass
         self._refresh_dir_stats()
 
     def _clean_system(self):
@@ -268,28 +257,34 @@ class MantenimientoView(ctk.CTkFrame):
         if not messagebox.askyesno("Limpiar Sistema", "¿Estás seguro de eliminar todos los archivos temporales (__pycache__, temp, spec, etc)?"):
             return
 
-        # 1. Carpetas temporales conocidas
-        targets = ["build", "tmp", "temp", ".pytest_cache", ".pyarmor"]
+        # 1. Carpetas temporales conocidas en el proyecto
+        targets = [
+            "build", "dist", "tmp", "temp", 
+            ".pytest_cache", ".pyarmor", ".venv/target", 
+            "gui/__pycache__", "gui/views/__pycache__"
+        ]
         for t in targets:
             p = Path(t)
-            if p.exists() and p.is_dir():
+            if p.exists():
                 try:
-                    shutil.rmtree(p)
+                    if p.is_dir(): shutil.rmtree(p)
+                    else: p.unlink()
                 except: pass
 
-        # 2. Archivos .spec en la raíz
-        for f in Path(".").glob("*.spec"):
-            try: f.unlink()
-            except: pass
+        # 2. Archivos .spec y .pyc huérfanos
+        for ext in ["*.spec", "*.pyc", "*.pyo"]:
+            for f in Path(".").rglob(ext):
+                try: f.unlink()
+                except: pass
 
-        # 3. __pycache__ recursivo
+        # 3. __pycache__ recursivo (fuerza bruta)
         for p in Path(".").rglob("__pycache__"):
             if p.is_dir():
                 try: shutil.rmtree(p)
                 except: pass
 
         self._refresh_dir_stats()
-        messagebox.showinfo("Limpieza Completada", "Se han eliminado los archivos temporales del sistema.")
+        messagebox.showinfo("Limpieza Completada", "Se han eliminado los archivos temporales y caches del proyecto.")
 
     def _open_dir(self):
         import os
@@ -320,10 +315,8 @@ class MantenimientoView(ctk.CTkFrame):
 
     def _clear_log_file(self):
         log_path = self._get_log_path()
-        try:
-            log_path.write_text("", encoding="utf-8")
-        except Exception:
-            pass
+        try: log_path.write_text("", encoding="utf-8")
+        except Exception: pass
         self._load_log()
 
     def _copy_log(self):

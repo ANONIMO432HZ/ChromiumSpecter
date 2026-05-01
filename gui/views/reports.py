@@ -22,7 +22,7 @@ from gui.theme import (
 )
 
 
-class ReportesView(ctk.CTkFrame):
+class ReportsView(ctk.CTkFrame):
     """Report file browser and manager."""
 
     def __init__(self, parent):

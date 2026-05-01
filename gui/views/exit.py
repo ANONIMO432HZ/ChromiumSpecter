@@ -1,8 +1,8 @@
 """
 Tab: Exit Point
 ────────────────
-Clean exit module with: "Eject Pendrive + Borrar Evidencias + Salir".
-No credential storage — just UX for the final step.
+Premium exit module with high-density security options.
+Centralizes evidence wiping and the timed self-destruct protocol.
 """
 
 import os
@@ -15,92 +15,125 @@ from tkinter import messagebox
 
 from gui.theme import (
     COLORS, FONTS, PAD,
-    make_card, make_label, make_button,
-    make_section_header,
+    make_card, make_label, make_button, make_entry,
+    make_section_header
 )
 
 
 class ExitView(ctk.CTkFrame):
-    """Final exit workflow card with eject + delete + quit sequence."""
+    """Final exit workflow with a high-tech security aesthetic."""
 
     def __init__(self, parent):
         super().__init__(parent, fg_color="transparent")
         self._build_ui()
 
-    # ── UI Construction ───────────────────────────────────────────────────────
-
     def _build_ui(self):
-        # Header
-        make_section_header(self, "Punto de Salida", "🚪")
+        # ── Main Layout ───────────────────────────────────────────────────────
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(1, weight=1)
 
-        # Main card
-        card = make_card(self)
-        card.pack(fill="x", padx=PAD["lg"], pady=PAD["md"])
-        card.configure(height=420)
+        # Header across top
+        header_frame = ctk.CTkFrame(self, fg_color="transparent")
+        header_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=PAD["lg"], pady=(PAD["lg"], 0))
+        make_section_header(header_frame, "Finalización de Sesión", "🛡️")
 
-        inner = ctk.CTkFrame(card, fg_color="transparent")
-        inner.pack(fill="both", expand=True, padx=PAD["xl"], pady=PAD["xl"])
+        # ── Left Column: Standard Exit & Wipe ─────────────────────────────────
+        left_col = ctk.CTkFrame(self, fg_color="transparent")
+        left_col.grid(row=1, column=0, sticky="nsew", padx=(PAD["lg"], PAD["md"]), pady=PAD["lg"])
 
-        # Icon centered above text
-        icon_label = ctk.CTkLabel(inner, text="🚨", font=("Segoe UI", 48))
-        icon_label.pack(pady=(0, PAD["lg"]))
+        exit_card = make_card(left_col)
+        exit_card.pack(fill="both", expand=True)
 
-        # Title
-        make_label(
-            inner,
-            "ELIMINAR EVIDENCIAS Y SALIR",
-            style="subtitle",
-            color=COLORS["danger"],
-        ).pack(pady=(0, PAD["md"]))
+        exit_inner = ctk.CTkFrame(exit_card, fg_color="transparent")
+        exit_inner.place(relx=0.5, rely=0.5, anchor="center")
 
-        # Description
-        msg = "Esta acción borrará todos los archivos temporales y logs, eyectará el pendrive virtual y cerrará la aplicación."
-        make_label(inner, msg, style="body", color=COLORS["text_secondary"], wraplength=520, justify="center").pack(pady=(0, PAD["lg"]))
+        ctk.CTkLabel(exit_inner, text="🚪", font=("Segoe UI", 64)).pack(pady=(0, PAD["md"]))
+        
+        make_label(exit_inner, "CIERRE ESTÁNDAR", style="subtitle", color=COLORS["accent"]).pack()
+        make_label(exit_inner, "Finaliza la sesión de auditoría de forma segura.", 
+                   style="small", color=COLORS["text_secondary"], justify="center").pack(pady=(0, PAD["xl"]))
 
-        # Action buttons row - Centered
-        btn_row = ctk.CTkFrame(inner, fg_color="transparent")
-        btn_row.pack(pady=(0, PAD["md"]))
-
+        # Action Buttons for Standard Exit
         make_button(
-            btn_row,
-            "🗑️ BORRAR Y SALIR",
+            exit_inner,
+            "🗑️  BORRAR EVIDENCIAS Y SALIR",
             command=self._run_exit_procedure,
             style="danger",
-            width=180,
-            height=48,
-        ).pack(side="left", padx=PAD["xs"])
+            width=260,
+            height=45
+        ).pack(pady=PAD["xs"])
 
         make_button(
-            btn_row,
-            "🚪 SALIR",
+            exit_inner,
+            "🚪  SALIR SIN BORRAR",
             command=self._perform_quit,
             style="secondary",
-            width=140,
-            height=48,
-        ).pack(side="left", padx=PAD["xs"])
+            width=260,
+            height=45
+        ).pack(pady=PAD["xs"])
 
-        # Legal / disclaimer
-        legal = ctk.CTkFrame(inner, fg_color="transparent")
-        legal.pack(pady=(PAD["lg"], 0))
-        make_label(legal, "⚠️ ADVERTENCIA: Esta operación es irreversible.", style="small", color=COLORS["warning"]).pack()
+        make_label(exit_inner, "⚠ Borra logs, reportes y temporales locales.", 
+                   style="tiny", color=COLORS["text_muted"]).pack(pady=(PAD["sm"], 0))
 
-    # ── Workflow ──────────────────────────────────────────────────────────────
+        # ── Right Column: High-Consequence Destruct ───────────────────────────
+        right_col = ctk.CTkFrame(self, fg_color="transparent")
+        right_col.grid(row=1, column=1, sticky="nsew", padx=(PAD["md"], PAD["lg"]), pady=PAD["lg"])
 
-    def _cancel_exit(self):
-        """Go back to the first tab (Auditoria)."""
-        try:
-            # Assuming the sidebar uses a specific method to switch
-            self.master.master._on_nav_click("Auditoria")
-        except:
-            pass
+        panic_card = ctk.CTkFrame(
+            right_col, 
+            fg_color=COLORS["bg_input"], 
+            corner_radius=12, 
+            border_width=2, 
+            border_color=COLORS["danger_dim"]
+        )
+        panic_card.pack(fill="both", expand=True)
+
+        panic_inner = ctk.CTkFrame(panic_card, fg_color="transparent")
+        panic_inner.place(relx=0.5, rely=0.5, anchor="center")
+
+        ctk.CTkLabel(panic_inner, text="🧨", font=("Segoe UI", 64)).pack(pady=(0, PAD["md"]))
+        
+        make_label(panic_inner, "PROTOCOLO DE PÁNICO", style="subtitle", color=COLORS["danger"]).pack()
+        make_label(panic_inner, "AUTODESTRUCCIÓN TOTAL DEL PROYECTO", 
+                   style="small", color=COLORS["text_secondary"], justify="center").pack(pady=(0, PAD["xl"]))
+
+        # Config Frame for Destruct
+        cfg_frame = ctk.CTkFrame(panic_inner, fg_color=COLORS["bg_panel"], corner_radius=8, border_width=1, border_color=COLORS["border"])
+        cfg_frame.pack(fill="x", padx=PAD["md"], pady=(0, PAD["lg"]))
+
+        cfg_row = ctk.CTkFrame(cfg_frame, fg_color="transparent")
+        cfg_row.pack(padx=PAD["md"], pady=PAD["md"])
+
+        make_label(cfg_row, "Retraso (seg):", style="small", color=COLORS["text_secondary"]).pack(side="left", padx=(0, PAD["sm"]))
+        self._sd_timer_var = ctk.StringVar(value="5")
+        timer_entry = make_entry(cfg_row, placeholder="5", width=60)
+        timer_entry.configure(textvariable=self._sd_timer_var)
+        timer_entry.pack(side="left")
+
+        # The Big Red Button
+        make_button(
+            panic_inner,
+            "🔥  INICIAR AUTODESTRUCCIÓN",
+            command=self._self_destruct,
+            style="danger",
+            width=280,
+            height=55
+        ).pack(pady=PAD["xs"])
+
+        warn_box = ctk.CTkFrame(panic_inner, fg_color="transparent")
+        warn_box.pack(pady=(PAD["sm"], 0))
+        make_label(warn_box, "❗ ESTA ACCIÓN ELIMINARÁ TODA LA CARPETA RAÍZ,", 
+                   style="tiny", color=COLORS["danger"]).pack()
+        make_label(warn_box, "RASTROS DE WINDOWS Y PORTAPAPELES.", 
+                   style="tiny", color=COLORS["danger"]).pack()
+
+    # ── Logic Handlers ────────────────────────────────────────────────────────
 
     def _run_exit_procedure(self):
         if messagebox.askyesno(
-            "Confirmar salida",
-            "¿Estás seguro de que deseas:\n\n"
-            "1. Eyectar el pendrive virtual?\n"
-            "2. Borrar todas las evidencias (logs, auditorías)?\n"
-            "3. Salir de la aplicación?",
+            "Confirmar Limpieza",
+            "¿Deseas eyectar el pendrive virtual y borrar todas las evidencias locales antes de salir?",
             icon='warning'
         ):
             self._perform_eject()
@@ -108,41 +141,87 @@ class ExitView(ctk.CTkFrame):
             self._perform_quit()
 
     def _perform_eject(self):
-        """Native Windows ejection using COM objects."""
         try:
             mountpoint = os.getenv("MOUNTPOINT") or "E:"
-            drive_letter = mountpoint.strip().replace("\\", "")[:2] # Ensure "E:" format
-            
+            drive_letter = mountpoint.strip().replace("\\", "")[:2]
             ps_script = f'(New-Object -ComObject Shell.Application).Namespace(17).ParseName("{drive_letter}").InvokeVerb("Eject")'
-            cmd = ["powershell", "-NoProfile", "-Command", ps_script]
-            
-            subprocess.run(cmd, check=True, capture_output=True)
-            print(f"[+] Drive {drive_letter} ejected.")
-        except Exception as e:
-            print(f"[-] Warning: failed to eject drive: {e}")
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps_script], capture_output=True)
+        except: pass
 
     def _perform_delete(self):
-        """Delete all traces (logs, temp source, audit results)."""
+        """Borrado profundo de evidencias y archivos temporales antes de salir."""
         targets = [
-            Path("logs"),
-            Path(".audit"),
-            Path("_main_build_patched.py"),
-            Path("_main_backup.py"),
-            Path("main_patched.py")
+            "logs", ".audit", "build", "dist", "tmp", "temp", 
+            ".pytest_cache", ".pyarmor", ".venv/target", 
+            "gui/__pycache__", "gui/views/__pycache__",
+            "_main_build_patched.py", "_main_backup.py", "main_patched.py"
         ]
 
-        for target in targets:
-            try:
-                if target.is_dir():
-                    shutil.rmtree(target)
-                else:
-                    target.unlink(missing_ok=True)
-                print(f"[+] Cleaned: {target}")
-            except Exception as e:
-                print(f"[-] Error cleaning {target}: {e}")
+        # 1. Limpiar objetivos explícitos
+        for t in targets:
+            p = Path(t)
+            if p.exists():
+                try:
+                    if p.is_dir(): shutil.rmtree(p)
+                    else: p.unlink()
+                except: pass
+
+        # 2. Barrido recursivo de archivos de rastro y caches
+        for ext in ["*.spec", "*.pyc", "*.pyo", "__pycache__"]:
+            for p in Path(".").rglob(ext):
+                try:
+                    if p.is_dir(): shutil.rmtree(p)
+                    else: p.unlink()
+                except: pass
+
+    def _self_destruct(self):
+        try:
+            seconds = int(self._sd_timer_var.get())
+        except:
+            messagebox.showerror("Error", "Ingresá un tiempo válido.")
+            return
+
+        if not messagebox.askyesno("CONFIRMACIÓN CRÍTICA", f"¿CONFIRMAR AUTODESTRUCCIÓN TOTAL EN {seconds} SEGUNDOS?"):
+            return
+
+        root_dir = Path(".").resolve()
+        parent_dir = root_dir.parent
+        current_pid = os.getpid()
+
+        bat_content = f"""@echo off
+title PROTOCOLO DE AUTODESTRUCCIÓN - EJECUTANDO...
+echo [*] Iniciando protocolo de saneamiento total...
+echo [*] Esperando {seconds} segundos de gracia...
+timeout /t {seconds} /nobreak >nul
+echo [*] Forzando cierre de procesos del sistema...
+taskkill /F /PID {current_pid} /T >nul 2>&1
+echo [*] Limpiando portapapeles de Windows...
+echo off | clip >nul 2>&1
+echo [*] Eliminando archivos temporales de usuario...
+del /q /s /f "%TEMP%\\*" >nul 2>&1
+echo [*] Eliminando carpeta raiz de la suite: {root_dir}
+cd /d "{parent_dir}"
+rd /s /q "{root_dir}"
+echo [*] Saneamiento de rastros locales...
+powershell -Command "Clear-History" >nul 2>&1
+echo [+] Protocolo completado con exito.
+timeout /t 3 >nul
+del "%~f0"
+"""
+        try:
+            bat_path = parent_dir / "wipe_suite.bat"
+            bat_path.write_text(bat_content, encoding="cp850")
+            subprocess.Popen(["cmd.exe", "/c", str(bat_path)], creationflags=subprocess.CREATE_NEW_CONSOLE)
+            self._perform_quit()
+        except Exception as e:
+            messagebox.showerror("Error", f"Falla en el protocolo: {e}")
 
     def _perform_quit(self):
         """Close the application cleanly."""
-        print("[!] Exiting suite. Goodbye.")
-        self.master.destroy()
-        sys.exit(0)
+        try:
+            # Safer way to get the root window and close it
+            root = self.winfo_toplevel()
+            root.destroy()
+        except Exception:
+            # Fallback
+            sys.exit(0)
