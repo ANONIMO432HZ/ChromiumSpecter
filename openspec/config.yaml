@@ -1,0 +1,10 @@
+# SDD Configuration
+schema: spec-driven
+artifact_store: hybrid
+execution_mode: auto
+strict_tdd: false
+
+context: |
+  Tech stack: Python 3.14.0, pycryptodomex, pywin32, requests
+  Architecture: Standalone script with CLI args and exfiltration.
+  Testing: Pytest (to be installed).
