@@ -116,7 +116,47 @@ HTML_TEMPLATE = """
         .opera { background-color: #f44336; color: white; }
         .footer { margin-top: 20px; font-size: 0.9em; color: #777; text-align: center; }
         .skipped { color: #aaa; font-style: italic; }
+        .actions { margin: 20px 0; text-align: right; }
+        .btn-export { 
+            background-color: #27ae60; color: white; padding: 10px 20px; border: none; 
+            border-radius: 5px; cursor: pointer; font-weight: bold; transition: background 0.3s;
+            text-decoration: none; display: inline-block;
+        }
+        .btn-export:hover { background-color: #2ecc71; }
     </style>
+    <script>
+        function exportToCSV() {
+            let csv = [];
+            csv.push("# Reporte de Auditoria Chromium");
+            csv.push("# Generado por la Suite de Auditoria");
+            
+            const tables = document.querySelectorAll("table");
+            tables.forEach((table, index) => {
+                if(index > 0) csv.push("\\n# --- SECCION SIGUIENTE ---");
+                const rows = table.querySelectorAll("tr");
+                rows.forEach(row => {
+                    const cols = row.querySelectorAll("td, th");
+                    const rowData = [];
+                    cols.forEach(col => {
+                        let text = col.innerText.replace(/(\\r\\n|\\n|\\r)/gm, "").trim();
+                        text = text.replace(/"/g, '""');
+                        rowData.push('"' + text + '"');
+                    });
+                    csv.push(rowData.join(","));
+                });
+            });
+
+            const csvFile = new Blob([csv.join("\\n")], {type: "text/csv;charset=utf-8;"});
+            const downloadLink = document.createElement("a");
+            const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+            downloadLink.download = "audit_export_" + stamp + ".csv";
+            downloadLink.href = window.URL.createObjectURL(csvFile);
+            downloadLink.style.display = "none";
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        }
+    </script>
 </head>
 <body>
     <div class="container">
@@ -131,6 +171,11 @@ HTML_TEMPLATE = """
             Credenciales válidas: <b>{{total}}</b> &nbsp;|&nbsp;
             Filtradas (no-HTTP): <b>{{filtered_count}}</b>
         </div>
+        
+        <div class="actions">
+            <button onclick="exportToCSV()" class="btn-export">📊 Exportar a CSV</button>
+        </div>
+
         <table>
             <thead>
                 <tr>
