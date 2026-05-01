@@ -52,3 +52,29 @@ Use the `gen --pack` command. Below is the equivalent to `--onefile --noconsole`
 
 3. **Verification**:
    The output produced will be in the `dist/` directory. Note that if using the **Trial version**, there are limits on script complexity and obfuscation.
+
+---
+
+## 3. Report not sent (Network Error)
+
+### Symptom
+The script finishes but you do not receive the message on Telegram or Discord.
+
+### Cause
+Internet micro-outages, unstable DNS, or temporary rate-limiting by the APIs.
+
+### Solution
+The suite implements automatic **network resilience** using a retry decorator (3 attempts with exponential backoff). If it fails after all retries, the script **will not delete** the local report file (even if `--no-wipe` is not used) to ensure the audit data is not lost. You can manually recover the report from the `.audit/` folder.
+
+---
+
+## 4. Console window briefly appears at startup (Stealth Mode)
+
+### Symptom
+When running the script or `.exe` with `-s` / `--stealth`, the command window is visible for a second before hiding.
+
+### Cause
+Console hiding is deferred until after argument parsing and module imports. This prevents the script from dying silently in the background if a critical library (like `pywin32`) is missing on the target PC.
+
+### Solution
+This is a design choice to ensure robustness. If you need it to be 100% invisible from millisecond zero, you must compile using `python build.py --noconsole`.

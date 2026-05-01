@@ -46,8 +46,11 @@ The suite automatically scans and decrypts the following targets:
   * Instant report delivery via **Telegram Bot** or **Discord Webhooks**.
 * **📊 Dynamic Reporting**:
   * Aesthetic reports in **Interactive HTML** or **CSV** files.
+  * **Enriched Metadata**: Hostname, User, PID, and Version included in each report.
+  * **Filtered Section**: Separate identification and visualization of non-HTTP credentials (local protocols, extensions, etc.).
 * **🕵️ Stealth Architecture**:
   * Automatic cleaning of temporary databases and **Auto-Wipe** of the local report after exfiltration.
+  * **Network Resilience**: Automatic retry system to ensure exfiltration despite connectivity issues.
 
 ---
 
@@ -122,8 +125,9 @@ For detailed instructions on hybrid (Windows + WSL) or pure (Linux with Wine) fl
 | **`-c`** | `--telegram-chatid` | Telegram chat ID (Plain or B64). |
 | **`-d`** | `--discord` | Discord Webhook URL (Plain or B64). |
 | `-s` | `--stealth` | Hides the console in real-time (identical to `.exe --noconsole`). |
-| — | `--no-wipe` | Prevents automatic report wiping. |
-| `-v` | `--verbose` | Verbose mode (detailed logs). |
+| — | `--no-wipe` | Prevents automatic report wiping from local disk after sending. |
+| — | `--clean` | Deletes all accumulated reports (`.html`, `.csv`) in the output folder. |
+| `-v` | `--verbose` | Verbose mode (detailed debug logs). |
 
 ---
 

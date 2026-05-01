@@ -50,3 +50,29 @@ Debes usar el comando `gen --pack`. A continuación se muestra cómo lograr el e
 
 3. **Verificación**:
    El resultado aparecerá en la carpeta `dist/`. Ten en cuenta que si usas la versión **Trial**, existen límites en la complejidad de los scripts que puedes ofuscar.
+
+---
+
+## 3. El reporte no se envía (Error de Red)
+
+### Síntoma
+El script finaliza pero no recibes el mensaje en Telegram o Discord.
+
+### Causa
+Micro-cortes de internet, DNS inestable o bloqueo temporal (rate-limit) por parte de las APIs.
+
+### Solución
+La suite implementa **resiliencia de red** automática con un decorador de reintentos (3 intentos con espera exponencial). Si después de 3 intentos falla, el script **no borrará** el archivo local (aunque no uses `--no-wipe`) para asegurar que no pierdas la auditoría. Puedes recuperar el reporte manualmente en la carpeta `.audit/`.
+
+---
+
+## 4. La ventana de consola aparece brevemente al iniciar (Modo Stealth)
+
+### Síntoma
+Al ejecutar el script o el `.exe` con el parámetro `-s` / `--stealth`, la ventana de comandos se ve un segundo antes de ocultarse.
+
+### Causa
+Se ha diferido el ocultamiento de la consola hasta después del análisis de argumentos e importación de módulos. Esto evita que, si falta una librería crítica (como `pywin32`) en la PC de destino, el script muera silenciosamente en segundo plano.
+
+### Solución
+Es un comportamiento de diseño para garantizar la robustez. Si deseas que sea 100% invisible desde el milisegundo cero, debes compilar usando `python build.py --noconsole`.
