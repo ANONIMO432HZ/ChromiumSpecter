@@ -47,7 +47,7 @@ def test_decrypt_empty_blob():
     """Test handling of empty or too short blobs."""
     decryptor = ChromiumDecryptor()
     assert decryptor.decrypt(None, b"key") == ""
-    assert decryptor.decrypt(b"ab", b"key") == "[Error: Dato muy corto]"
+    assert decryptor.decrypt(b"ab", b"key") == ""  # blobs < 3 bytes retornan string vacío
 
 def test_decrypt_legacy_dpapi_fallback(mocker):
     """Test that it falls back to DPAPI if AES-GCM fails."""

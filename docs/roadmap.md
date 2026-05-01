@@ -7,6 +7,9 @@ Este documento detalla la hoja de ruta para transformar esta suite en una herram
 ## 🏗️ Fase 1: Facilidad de Uso (Auditor Builder)
 **Objetivo:** Permitir que usuarios sin conocimientos técnicos generen binarios personalizados con "pocos clics".
 
+- [x] **Modularización del Core CLI:**
+    - ✅ **Completado:** `main.py` refactorizado como un motor (Core) independiente de la UI.
+    - ✅ **Parámetros Extendidos:** Añadidos filtros por navegador, soporte JSON, delays evasivos y control de directorios.
 - [ ] **Constructor Gráfico (GUI):** Desarrollar una interfaz en Python (Tkinter/CustomTkinter) que permita:
     - Ingresar credenciales (Telegram/Discord) de forma visual.
     - Seleccionar íconos personalizados (.ico).
