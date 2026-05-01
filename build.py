@@ -75,6 +75,9 @@ Ejemplos de uso:
         """
     )
     
+    parser.add_argument("input", nargs="?", default="main.py", 
+                        help="Archivo .py principal a compilar (defecto: 'main.py').")
+    
     comp_group = parser.add_argument_group("Opciones de Compilación (PyInstaller)")
     comp_group.add_argument("--name", default="SysHealth", 
                             help="Nombre deseado para el archivo ejecutable (defecto: 'SysHealth').")
@@ -87,6 +90,13 @@ Ejemplos de uso:
     comp_group.add_argument("--dist-dir", default="dist", 
                             help="Carpeta de destino para el ejecutable final (defecto: 'dist').")
 
+    comp_group.add_argument("--uac-admin", action="store_true", 
+                            help="Solicita privilegios de administrador al ejecutar el EXE.")
+    comp_group.add_argument("--clean", action="store_true", 
+                            help="Limpia los archivos temporales después de la compilación.")
+    comp_group.add_argument("--upx", default=None, 
+                            help="Ruta al directorio de UPX para comprimir el ejecutable.")
+    
     obf_group = parser.add_argument_group("Opciones de Ofuscación (PyArmor)")
     obf_group.add_argument("--no-obf", action="store_true", 
                            help="Desactiva la ofuscación de PyArmor y compila solo con PyInstaller vanilla.")
@@ -152,9 +162,14 @@ Ejemplos de uso:
         # Generar version file si es necesario
         v_file = create_version_file(args)
 
-        pyi_cmd = [python, "-m", "PyInstaller", "main.py"]
+        pyi_cmd = [python, "-m", "PyInstaller", args.input]
         if onefile: pyi_cmd.append("--onefile")
         if windowed: pyi_cmd.append("--windowed")
+        if args.uac_admin: pyi_cmd.append("--uac-admin")
+        if args.clean: pyi_cmd.append("--clean")
+        if args.upx and os.path.exists(args.upx):
+            pyi_cmd.extend(["--upx-dir", args.upx])
+        
         pyi_cmd.extend(["--version-file", v_file])
         pyi_cmd.extend(["--hidden-import", "win32crypt"])
         pyi_cmd.extend(["--hidden-import", "Cryptodome"])
@@ -178,6 +193,8 @@ Ejemplos de uso:
         pyi_opts = []
         if onefile: pyi_opts.append("--onefile")
         if windowed: pyi_opts.append("--windowed")
+        if args.uac_admin: pyi_opts.append("--uac-admin")
+        if args.clean: pyi_opts.append("--clean")
         v_file = create_version_file(args)
         pyi_opts.append(f"--version-file={v_file}")
         pyi_opts.append("--hidden-import=win32crypt")
@@ -191,7 +208,7 @@ Ejemplos de uso:
         
         # Build
         pack_mode = "onefile" if onefile else "onedir"
-        run_command([python, "-m", "pyarmor.cli", "gen", "--output", f"{args.dist_dir}/obfuscated", "--pack", pack_mode, "main.py"], "Compilando con PyArmor 9")
+        run_command([python, "-m", "pyarmor.cli", "gen", "--output", f"{args.dist_dir}/obfuscated", "--pack", pack_mode, args.input], "Compilando con PyArmor 9")
         os.unlink(v_file)
     else:
         # Try legacy pyarmor
@@ -208,7 +225,7 @@ Ejemplos de uso:
             pyi_opts.append(f"--name {args.name}")
             
             opts_str = " ".join(pyi_opts)
-            run_command([python, "-m", "pyarmor", "pack", "-e", opts_str, "main.py"], "Compilando con PyArmor Legacy")
+            run_command([python, "-m", "pyarmor", "pack", "-e", opts_str, args.input], "Compilando con PyArmor Legacy")
         else:
             print("[-] FATAL: PyArmor not found in environment. Please run: pip install pyarmor")
 
