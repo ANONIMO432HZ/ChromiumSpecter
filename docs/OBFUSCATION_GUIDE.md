@@ -3,7 +3,7 @@
 > [!NOTE]
 > [English Version](OBFUSCATION_GUIDE.en.md) | **Versión en Español**
 
-Esta guía detalla el flujo de trabajo profesional para proteger la **Chromium Auditor Suite** contra ingeniería inversa, análisis estático y detecciones heurísticas de antivirus (AV/EDR).
+Esta guía detalla el flujo de trabajo profesional para proteger la suite **ChromiumSpecter** contra ingeniería inversa, análisis estático y detecciones heurísticas de antivirus (AV/EDR).
 
 ---
 

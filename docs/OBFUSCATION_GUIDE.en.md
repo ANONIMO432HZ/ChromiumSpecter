@@ -3,7 +3,7 @@
 > [!NOTE]
 > **English Version** | [Versión en Español](OBFUSCATION_GUIDE.md)
 
-This guide details the professional workflow for protecting the **Chromium Auditor Suite** against reverse engineering, static analysis, and antivirus (AV/EDR) heuristic detections.
+This guide details the professional workflow to protect the **ChromiumSpecter** suite against reverse engineering, static analysis, and heuristic antivirus (AV/EDR) detections.
 
 ---
 

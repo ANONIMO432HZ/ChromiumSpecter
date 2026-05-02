@@ -281,6 +281,7 @@ class BuilderView(ctk.CTkScrollableFrame):
         self._uac_var          = ctk.BooleanVar(value=False)
         self._clean_var        = ctk.BooleanVar(value=True)
         self._upx_var          = ctk.BooleanVar(value=False)
+        self._self_destruct_var = ctk.BooleanVar(value=False)
 
         opts_inner = ctk.CTkFrame(r_col, fg_color="transparent")
         opts_inner.pack(pady=PAD["xs"])
@@ -290,7 +291,7 @@ class BuilderView(ctk.CTkScrollableFrame):
 
         for label, var in [("🛡 Ofuscar con PyArmor", self._obfuscate_var), ("🖥 Mostrar consola", self._show_console_var), ("📂 Multi-archivo", self._multifile_var)]:
             ctk.CTkCheckBox(c1, text=label, variable=var, fg_color=COLORS["accent"], font=FONTS["body"]).pack(anchor="w", pady=PAD["xs"])
-        for label, var in [("⚡ Limpiar temporales", self._clean_var), ("🔑 Solicitar Admin (UAC)", self._uac_var), ("📦 Compresión UPX", self._upx_var)]:
+        for label, var in [("⚡ Limpiar temporales", self._clean_var), ("🔑 Solicitar Admin (UAC)", self._uac_var), ("📦 Compresión UPX", self._upx_var), ("💥 Autodestrucción", self._self_destruct_var)]:
             ctk.CTkCheckBox(c2, text=label, variable=var, fg_color=COLORS["accent"], font=FONTS["body"]).pack(anchor="w", pady=PAD["xs"])
 
         # ── Build button card ─────────────────────────────────────────────────

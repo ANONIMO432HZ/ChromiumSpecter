@@ -16,7 +16,9 @@ Este documento detalla la hoja de ruta para transformar esta suite en una herram
   - Seleccionar íconos personalizados (.ico).
   - Configurar flags (Stealth, No-Wipe, etc.) mediante checkboxes.
   - ✅ **Completado:** Botón único de "Build" que automatiza el flujo de ofuscación y compilación.
-- [x] **Generador de Configuraciones:** El builder codifica automáticamente las credenciales en Base64 para mayor sigilo.
+- [x] **Anti-Forensics Nativo:**
+  - ✅ **Completado:** Protocolo de Autodestrucción (Self-Delete) tras exfiltración exitosa.
+  - ✅ **Completado:** Limpieza profunda de temporales y bloqueos de I/O de logs.
 
 ## 🌐 Fase 2: Cobertura Universal (Soporte Gecko)
 
@@ -29,22 +31,22 @@ Este documento detalla la hoja de ruta para transformar esta suite en una herram
 
 **Objetivo:** Aumentar la tasa de éxito y la persistencia del sigilo frente a analistas y sistemas de seguridad.
 
-- [ ] **Detección de Anti-Análisis (Anti-VM/Sandbox):**
+- [ ] **Detección de Anti-Análisis Proactiva (Anti-VM/Sandbox):**
   - Verificar nombres de dispositivos, drivers y MAC addresses comunes en entornos virtuales (VirtualBox, VMware, QEMU).
-  - Abortar ejecución si se detectan sandboxes de análisis dinámico (Any.run, JoeSandbox).
+  - Abortar ejecución si se detectan sandboxes de análisis dinámico.
 - [x] **Spoofing de Metadatos de Archivo:**
-  - ✅ **Completado:** Implementada lógica en `build.py` para inyectar CompanyName, FileDescription, etc.
-  - ✅ **Presets:** Implementados perfiles rápidos (`google`, `microsoft`, `intel`) para configuración instantánea.
-- [ ] **Carga Dinámica de DLLs:** Refinar aún más cómo se cargan las dependencias de sistema para evitar firmas estáticas de importación.
+  - ✅ **Completado:** Inyección de CompanyName, FileDescription, etc. via Dashboard.
+- [x] **Evasión de Tráfico:**
+  - ✅ **Completado:** Implementación de Delays entre envíos para aplanar la firma de red.
 
 ## 📊 Fase 4: Reportes y Post-Exfiltración
 
 **Objetivo:** Mejorar la calidad de los datos obtenidos y su gestión.
 
 - [ ] **Captura de Capturas de Pantalla:** Opción para adjuntar una captura de pantalla del sistema en el momento de la auditoría.
-- [ ] **Panel de Control Web (Opcional):** Un backend centralizado para recibir y visualizar reportes de múltiples fuentes de forma organizada.
+- [ ] **Panel de Control Web (Opcional):** Un backend centralizado para recibir y visualizar reportes de múltiples fuentes.
 
 ---
 
 > [!TIP]
-> Prioridad Sugerida: **Fase 1 (Builder)** > **Fase 2 (Firefox)** > **Fase 3 (Evasión)**.
+> Prioridad Actual: **Soporte Gecko (Firefox)** > **Anti-VM/Sandbox**.

@@ -123,9 +123,9 @@ class ExitView(ctk.CTkFrame):
 
         warn_box = ctk.CTkFrame(panic_inner, fg_color="transparent")
         warn_box.pack(pady=(PAD["sm"], 0))
-        make_label(warn_box, "❗ ESTA ACCIÓN ELIMINARÁ TODA LA CARPETA RAÍZ,", 
+        make_label(warn_box, "❗ ESTA ACCIÓN ELIMINARÁ EL .EXE Y LOS ARCHIVOS RELACIONADOS AL PROJECTO.", 
                    style="tiny", color=COLORS["danger"]).pack()
-        make_label(warn_box, "RASTROS DE WINDOWS Y PORTAPAPELES.", 
+        make_label(warn_box, " NO HAY FORMA DE RECUPERAR LOS ARCHIVOS UNA VEZ ELIMINADOS.", 
                    style="tiny", color=COLORS["danger"]).pack()
 
     # ── Logic Handlers ────────────────────────────────────────────────────────

