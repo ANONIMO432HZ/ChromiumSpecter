@@ -335,6 +335,11 @@ class MaintenanceView(ctk.CTkFrame):
         if not messagebox.askyesno("Limpiar Sistema", "¿Estás seguro de eliminar todos los archivos temporales (__pycache__, temp, spec, etc)?"):
             return
 
+        # 0. Limpiar portapapeles
+        try:
+            self.winfo_toplevel().clipboard_clear()
+        except: pass
+
         # 1. Carpetas temporales conocidas en el proyecto
         targets = [
             "build", "dist", "tmp", "temp", 

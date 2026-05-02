@@ -3,241 +3,292 @@ Tab: Resultados
 ───────────────
 Displays the credential table from the last audit run.
 Features:
-  • Searchable / filterable table (browser, URL, user)
-  • Inline password reveal toggle
-  • Row count badge
-  • Copy-to-clipboard on row click
-  • Export to clipboard (JSON)
+  • Expanding Widget Pool (Zero-destruction rendering)
+  • Proportional grid architecture (Flexible columns)
+  • Selectable text (mouse selection enabled)
+  • Global & Per-row password visibility toggle
+  • Per-field quick copy buttons (User/Pass)
+  • Optimized for 1000+ records
 """
 
-import tkinter as tk
-import json
 import customtkinter as ctk
-
-from gui.theme import (
-    COLORS, FONTS, PAD,
-    make_card, make_label, make_button, make_entry,
-    make_section_header, make_badge,
-)
-
+import json
+import threading
+import shutil
+import tempfile
+from pathlib import Path
+from datetime import datetime
+from tkinter import filedialog, messagebox
+from gui.theme import COLORS, FONTS, PAD, make_card, make_label, make_entry, make_button, make_badge
 
 class ResultsView(ctk.CTkFrame):
-    """Credential results table with search and reveal."""
+    """Credential results table with expanding performance pool and quick-copy actions."""
 
-    COLS = ("Navegador", "Perfil", "URL", "Usuario", "Contraseña")
-    COL_WIDTHS = (100, 90, 300, 180, 180)
+    COLS = ["Navegador", "Perfil", "URL", "Usuario", "Contraseña"]
+    COL_WEIGHTS = [1, 1, 4, 2, 2]
 
     def __init__(self, parent):
         super().__init__(parent, fg_color="transparent")
-        self._all_rows: list[list] = []
-        self._shown_rows: list[list] = []
-        self._reveal = False
+        self._all_results = []
+        self._filtered_results = []
+        self._show_passwords = False
+        self._revealed_indices = set()
+        self._row_pool = []
+
         self._build_ui()
 
-    # ── Public API ────────────────────────────────────────────────────────────
-
-    def load_results(self, results: list):
-        """Called by the App with raw audit result rows."""
-        self._all_rows = list(results) if results else []
-        self._apply_filter()
-        self._count_badge.configure(text=f"  {len(self._all_rows)} total  ")
-
-    # ── UI Construction ───────────────────────────────────────────────────────
+    def load_results(self, results):
+        """Main entry point to inject audit data."""
+        self._all_results = results if results else []
+        self._revealed_indices.clear()
+        self._on_search()
 
     def _build_ui(self):
         # ── Toolbar ──────────────────────────────────────────────────────────
         toolbar = make_card(self)
         toolbar.pack(fill="x", padx=PAD["lg"], pady=(PAD["lg"], PAD["sm"]))
 
-        tb = ctk.CTkFrame(toolbar, fg_color="transparent")
-        tb.pack(fill="x", padx=PAD["md"], pady=PAD["sm"])
+        inner = ctk.CTkFrame(toolbar, fg_color="transparent")
+        inner.pack(fill="x", padx=PAD["md"], pady=PAD["sm"])
 
-        make_label(tb, "🔍", style="subtitle").pack(side="left", padx=(0, PAD["sm"]))
+        search_container = ctk.CTkFrame(inner, fg_color="transparent")
+        search_container.pack(side="left", fill="x", expand=True)
+
+        make_label(search_container, "🔍", style="subtitle").pack(side="left", padx=(0, PAD["sm"]))
         self._search_var = ctk.StringVar()
-        self._search_var.trace_add("write", lambda *_: self._apply_filter())
-        search = make_entry(tb, placeholder="Buscar por URL, usuario, navegador…", width=320)
+        self._search_var.trace_add("write", lambda *_: self._on_search())
+        search = make_entry(search_container, placeholder="Filtrar resultados...", width=380)
         search.configure(textvariable=self._search_var)
         search.pack(side="left", padx=(0, PAD["lg"]))
 
-        make_label(tb, "Navegador:", style="small", color=COLORS["text_secondary"]).pack(side="left", padx=(0, PAD["sm"]))
-        self._filter_browser = ctk.StringVar(value="Todos")
-        ctk.CTkOptionMenu(
-            tb,
-            values=["Todos", "Chrome", "Edge", "Brave", "Vivaldi", "Opera", "Opera GX"],
-            variable=self._filter_browser,
-            command=lambda _: self._apply_filter(),
-            fg_color=COLORS["bg_input"],
-            button_color=COLORS["accent_dim"],
-            button_hover_color=COLORS["accent"],
-            dropdown_fg_color=COLORS["bg_card"],
-            dropdown_hover_color=COLORS["bg_card_hover"],
-            font=FONTS["small"],
-            text_color=COLORS["text_primary"],
-            width=140,
-        ).pack(side="left", padx=(0, PAD["lg"]))
+        self._stats_badge = make_badge(search_container, "0 REGISTROS", "text_muted")
+        self._stats_badge.pack(side="left")
 
-        # Reveal toggle
-        self._reveal_btn = make_button(tb, "👁  Mostrar", command=self._toggle_reveal, style="secondary", width=110)
-        self._reveal_btn.pack(side="left", padx=(0, PAD["sm"]))
+        actions_frame = ctk.CTkFrame(inner, fg_color="transparent")
+        actions_frame.pack(side="right")
+        
+        make_button(actions_frame, "📦 Exportar ZIP", command=self._export_audit, style="action", width=130).pack(side="left", padx=PAD["xs"])
+        make_button(actions_frame, "📋 Copiar JSON", command=self._copy_json, style="secondary", width=120).pack(side="left", padx=PAD["xs"])
+        make_button(actions_frame, "🗑 Limpiar", command=self._clear_results, style="danger", width=100).pack(side="left")
 
-        make_button(tb, "📋  Copiar JSON", command=self._copy_json, style="secondary", width=120).pack(side="left", padx=(0, PAD["sm"]))
-        make_button(tb, "📦  Exportar ZIP", command=self._export_audit, style="action",    width=120).pack(side="left", padx=(0, PAD["sm"]))
-        make_button(tb, "🗑  Limpiar",      command=self._clear_results, style="danger",    width=100).pack(side="left")
+        # ── Table View ────────────────────────────────────────────────────────
+        self._table_container = make_card(self)
+        self._table_container.pack(fill="both", expand=True, padx=PAD["lg"], pady=(0, PAD["lg"]))
 
-        self._count_badge = make_badge(tb, "0 total", "text_muted")
-        self._count_badge.pack(side="right", padx=PAD["sm"])
+        # --- Header Row ---
+        self._hdr_frame = ctk.CTkFrame(self._table_container, fg_color=COLORS["bg_panel"], height=45, corner_radius=0)
+        self._hdr_frame.pack(fill="x")
+        self._hdr_frame.pack_propagate(False)
+        
+        for i, (col, weight) in enumerate(zip(self.COLS, self.COL_WEIGHTS)):
+            self._hdr_frame.grid_columnconfigure(i, weight=weight)
+            lbl_container = ctk.CTkFrame(self._hdr_frame, fg_color="transparent")
+            lbl_container.grid(row=0, column=i, sticky="nsew", padx=PAD["sm"])
+            
+            content = ctk.CTkFrame(lbl_container, fg_color="transparent")
+            content.pack(side="left", fill="y")
+            lbl = ctk.CTkLabel(content, text=col.upper(), font=FONTS["heading"], text_color=COLORS["text_secondary"], anchor="w")
+            lbl.pack(side="left")
+            
+            if col == "Contraseña":
+                self._eye_btn = ctk.CTkButton(
+                    content, text="👁", width=28, height=28, fg_color="transparent",
+                    hover_color=COLORS["bg_card_hover"], font=("Segoe UI", 13),
+                    text_color=COLORS["text_muted"], command=self._toggle_passwords_global
+                )
+                self._eye_btn.pack(side="left", padx=PAD["xs"])
 
-        # ── Table ────────────────────────────────────────────────────────────
-        make_section_header(self, "Credenciales Encontradas", "🔑")
-
-        table_card = make_card(self)
-        table_card.pack(fill="both", expand=True, padx=PAD["lg"], pady=(0, PAD["lg"]))
-
-        # Outer frame for canvas + scrollbars
-        frame = ctk.CTkFrame(table_card, fg_color="transparent")
-        frame.pack(fill="both", expand=True, padx=PAD["sm"], pady=PAD["sm"])
-
-        # Header row (fake)
-        hdr = ctk.CTkFrame(frame, fg_color=COLORS["accent_dim"], corner_radius=6)
-        hdr.pack(fill="x", pady=(0, 2))
-        for col, width in zip(self.COLS, self.COL_WIDTHS):
-            ctk.CTkLabel(
-                hdr, text=col, font=FONTS["heading"],
-                text_color=COLORS["accent"], width=width, anchor="w",
-            ).pack(side="left", padx=PAD["sm"], pady=PAD["sm"])
-
-        # Scrollable body
-        self._body = ctk.CTkScrollableFrame(
-            frame,
-            fg_color=COLORS["bg_input"],
-            corner_radius=6,
+        # --- Scrollable Body ---
+        self._scroll = ctk.CTkScrollableFrame(
+            self._table_container, fg_color="transparent", corner_radius=0,
             scrollbar_button_color=COLORS["accent_dim"],
-            scrollbar_button_hover_color=COLORS["accent"],
+            scrollbar_button_hover_color=COLORS["accent"]
         )
-        self._body.pack(fill="both", expand=True)
+        self._scroll.pack(fill="both", expand=True)
 
-        self._render_rows()
+        # --- Empty State Visual ---
+        # Placed in table_container to avoid clipping by scroll internal frame
+        self._empty_state = ctk.CTkFrame(self._table_container, fg_color="transparent")
+        self._empty_state.place(relx=0.5, rely=0.6, anchor="center")
+        
+        ctk.CTkLabel(self._empty_state, text="STATUS: IDLE", font=FONTS["heading"], text_color=COLORS["accent_dim"]).pack()
+        make_label(self._empty_state, "Bandeja de Resultados Vacía", style="subtitle", color=COLORS["text_secondary"]).pack(pady=(PAD["xs"], PAD["sm"]))
+        make_label(self._empty_state, "Inicie una auditoría para recolectar datos.", style="small", color=COLORS["text_muted"]).pack()
 
-    # ── Data helpers ──────────────────────────────────────────────────────────
+    def _add_row_to_pool(self):
+        """Creates a new optimized row with per-field action buttons."""
+        idx = len(self._row_pool)
+        row_frame = ctk.CTkFrame(self._scroll, fg_color="transparent", height=38, corner_radius=0, border_width=0)
+        for i, weight in enumerate(self.COL_WEIGHTS):
+            row_frame.grid_columnconfigure(i, weight=weight)
+        
+        entries = []
+        for i in range(len(self.COLS)):
+            entry_container = ctk.CTkFrame(row_frame, fg_color="transparent", border_width=0)
+            entry_container.grid(row=0, column=i, sticky="nsew", padx=PAD["sm"], pady=4)
+            
+            e = ctk.CTkEntry(
+                entry_container, fg_color="transparent", border_width=0,
+                text_color=COLORS["text_primary"], font=FONTS["body"],
+                state="readonly", height=30
+            )
+            e.pack(side="left", fill="both", expand=True)
+            
+            copy_btn = None
+            eye_btn = None
+            
+            if i in (3, 4):
+                copy_btn = ctk.CTkButton(
+                    entry_container, text="📋", width=24, height=24, fg_color="transparent",
+                    hover_color=COLORS["bg_card_hover"], font=("Segoe UI", 11),
+                    text_color=COLORS["text_muted"],
+                    command=lambda d_idx=idx, col=i: self._copy_cell(d_idx, col)
+                )
+                copy_btn.pack(side="right", padx=(2, 0))
+            
+            if i == 4:
+                eye_btn = ctk.CTkButton(
+                    entry_container, text="👁", width=24, height=24, fg_color="transparent",
+                    hover_color=COLORS["bg_card_hover"], font=("Segoe UI", 11),
+                    text_color=COLORS["text_muted"],
+                    command=lambda d_idx=idx: self._toggle_row_password(d_idx)
+                )
+                eye_btn.pack(side="right")
+            
+            entries.append({"widget": e, "eye": eye_btn, "copy": copy_btn})
+        
+        row_data = {"frame": row_frame, "entries": entries}
+        self._row_pool.append(row_data)
+        return row_data
 
-    def _apply_filter(self):
-        query  = self._search_var.get().lower()
-        browser= self._filter_browser.get()
-        rows   = self._all_rows
+    def _update_view(self):
+        data = self._filtered_results
+        count = len(data)
 
-        if browser != "Todos":
-            rows = [r for r in rows if str(r[0]).lower() == browser.lower()]
-        if query:
-            rows = [r for r in rows if any(query in str(cell).lower() for cell in r)]
-
-        self._shown_rows = rows
-        self._render_rows()
-        self._count_badge.configure(text=f"  {len(self._shown_rows)} / {len(self._all_rows)}  ")
-
-    def _render_rows(self):
-        for w in self._body.winfo_children():
-            w.destroy()
-
-        if not self._shown_rows:
-            ctk.CTkLabel(
-                self._body,
-                text="Sin resultados — ejecutá una auditoría primero.",
-                font=FONTS["body"],
-                text_color=COLORS["text_muted"],
-            ).pack(pady=PAD["xl"])
+        if count == 0:
+            self._empty_state.place(relx=0.5, rely=0.6, anchor="center")
+            for row in self._row_pool: row["frame"].pack_forget()
             return
+        
+        self._empty_state.place_forget()
 
-        BROWSER_COLORS = {
-            "chrome": "warning", "edge": "info", "brave": "danger",
-            "opera": "danger", "opera gx": "danger", "vivaldi": "accent",
-        }
+        while len(self._row_pool) < count:
+            self._add_row_to_pool()
 
-        for i, row in enumerate(self._shown_rows):
-            bg = COLORS["bg_card"] if i % 2 == 0 else COLORS["bg_panel"]
-            r_frame = ctk.CTkFrame(self._body, fg_color=bg, corner_radius=4)
-            r_frame.pack(fill="x", pady=1)
-            r_frame.bind("<Button-1>", lambda e, r=row: self._copy_row(r))
+        for i in range(len(self._row_pool)):
+            row_widgets = self._row_pool[i]
+            if i < count:
+                item = data[i]
+                row_widgets["frame"].pack(fill="x", pady=0, padx=PAD["xs"])
+                
+                bg = COLORS["bg_card"] if i % 2 == 0 else "transparent"
+                row_widgets["frame"].configure(fg_color=bg)
 
-            for j, (val, width) in enumerate(zip(row, self.COL_WIDTHS)):
-                text = str(val) if val else "—"
-                if j == 4 and not self._reveal:  # password col
-                    text = "••••••••"
-                if j == 0:  # browser badge col
-                    color_key = BROWSER_COLORS.get(str(val).lower(), "accent")
-                    lbl = make_badge(r_frame, text, color_key)
-                else:
-                    lbl = ctk.CTkLabel(
-                        r_frame, text=text,
-                        font=FONTS["mono_sm"] if j == 4 else FONTS["small"],
-                        text_color=COLORS["success"] if (j == 4 and self._reveal) else COLORS["text_primary"],
-                        width=width, anchor="w",
-                    )
-                lbl.pack(side="left", padx=PAD["sm"], pady=5)
-                lbl.bind("<Button-1>", lambda e, r=row: self._copy_row(r))
+                if row_widgets["entries"][3]["copy"]:
+                    row_widgets["entries"][3]["copy"].configure(command=lambda d_idx=i: self._copy_cell(d_idx, 3))
+                if row_widgets["entries"][4]["copy"]:
+                    row_widgets["entries"][4]["copy"].configure(command=lambda d_idx=i: self._copy_cell(d_idx, 4))
+                if row_widgets["entries"][4]["eye"]:
+                    row_widgets["entries"][4]["eye"].configure(command=lambda d_idx=i: self._toggle_row_password(d_idx))
 
-    def _toggle_reveal(self):
-        self._reveal = not self._reveal
-        self._reveal_btn.configure(
-            text="🙈  Ocultar" if self._reveal else "👁  Mostrar",
-            fg_color=COLORS["success_dim"] if self._reveal else COLORS["bg_card"],
-            text_color=COLORS["success"] if self._reveal else COLORS["text_secondary"],
+                for idx, (val, cell) in enumerate(zip(item[:5], row_widgets["entries"])):
+                    entry = cell["widget"]
+                    eye   = cell["eye"]
+                    copy  = cell["copy"]
+                    
+                    entry.configure(state="normal")
+                    entry.delete(0, "end")
+                    
+                    display_text = str(val)
+                    revealed = self._show_passwords or (i in self._revealed_indices)
+                    
+                    if idx == 4:
+                        if not revealed:
+                            display_text = "•" * min(len(display_text), 14)
+                        
+                        eye.configure(
+                            text="🙈" if (i in self._revealed_indices) else "👁",
+                            text_color=COLORS["success"] if (i in self._revealed_indices) else COLORS["text_muted"]
+                        )
+                        if self._show_passwords: eye.pack_forget()
+                        else: eye.pack(side="right")
+
+                    entry.insert(0, display_text)
+                    if idx == 2: entry.configure(text_color=COLORS["info"]) 
+                    elif idx == 4: entry.configure(text_color=COLORS["accent"] if revealed else COLORS["text_primary"]) 
+                    else: entry.configure(text_color=COLORS["text_primary"])
+                    entry.configure(state="readonly")
+            else:
+                row_widgets["frame"].pack_forget()
+
+    def _copy_cell(self, data_idx, col_idx):
+        if data_idx < len(self._filtered_results):
+            text = str(self._filtered_results[data_idx][col_idx])
+            root = self.winfo_toplevel()
+            root.clipboard_clear()
+            root.clipboard_append(text)
+
+    def _toggle_row_password(self, data_idx):
+        if data_idx in self._revealed_indices:
+            self._revealed_indices.remove(data_idx)
+        else:
+            self._revealed_indices.add(data_idx)
+        self._update_view()
+
+    def _toggle_passwords_global(self):
+        self._show_passwords = not self._show_passwords
+        self._eye_btn.configure(
+            text="🙈" if self._show_passwords else "👁",
+            text_color=COLORS["success"] if self._show_passwords else COLORS["text_muted"]
         )
-        self._render_rows()
+        if self._show_passwords: self._revealed_indices.clear()
+        self._update_view()
 
-    def _copy_row(self, row):
-        text = "\t".join(str(c) for c in row)
-        self.clipboard_clear()
-        self.clipboard_append(text)
+    def _on_search(self):
+        query = self._search_var.get().lower()
+        self._filtered_results = [r for r in self._all_results if any(query in str(f).lower() for f in r)] if query else self._all_results
+        self._revealed_indices.clear() 
+        self._update_view()
+        self._stats_badge.configure(
+            text=f"{len(self._filtered_results)} REGISTROS",
+            fg_color=COLORS["accent_dim"] if self._filtered_results else COLORS["bg_card"],
+            text_color=COLORS["accent"] if self._filtered_results else COLORS["text_muted"]
+        )
 
     def _copy_json(self):
-        if not self._shown_rows:
-            return
+        if not self._filtered_results: return
         keys = ["navegador", "perfil", "url", "usuario", "contraseña"]
-        data = [dict(zip(keys, row)) for row in self._shown_rows]
-        self.clipboard_clear()
-        self.clipboard_append(json.dumps(data, ensure_ascii=False, indent=2))
+        data = [dict(zip(keys, r)) for r in self._filtered_results]
+        root = self.winfo_toplevel()
+        root.clipboard_clear()
+        root.clipboard_append(json.dumps(data, ensure_ascii=False, indent=2))
 
     def _clear_results(self):
-        self._all_rows = []
-        self._shown_rows = []
-        self._count_badge.configure(text="  0 total  ")
-        self._render_rows()
+        self._all_results, self._filtered_results = [], []
+        try:
+            self.winfo_toplevel().clipboard_clear()
+        except: pass
+        self._on_search()
 
     def _export_audit(self):
-        """Empaqueta el directorio .audit en un ZIP (mismo comportamiento que en Mantenimiento)."""
-        import shutil, tempfile, threading
-        from tkinter import filedialog, messagebox
-        from datetime import datetime
-        from pathlib import Path
-
         d = Path(".audit")
         if not d.exists() or not any(d.iterdir()):
             messagebox.showwarning("Exportar", "No hay datos de auditoría para exportar.")
             return
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        suggested_name = f"auditoria_chromium_{timestamp}.zip"
-        
         save_path = filedialog.asksaveasfilename(
             title="Exportar Evidencia (ZIP)",
-            initialfile=suggested_name,
+            initialfile=f"auditoria_chromium_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
             defaultextension=".zip",
             filetypes=[("Archivo ZIP", "*.zip")]
         )
-
-        if not save_path:
-            return
-
-        def _do_export():
+        if not save_path: return
+        def _do():
             try:
-                # Crear ZIP en una ubicación temporal
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     zip_base = Path(tmp_dir) / "export"
                     shutil.make_archive(str(zip_base), 'zip', d)
                     shutil.move(str(zip_base) + ".zip", save_path)
-
-                self.after(0, lambda: messagebox.showinfo("Exportar", f"Evidencia exportada correctamente en:\n{save_path}"))
+                self.after(0, lambda: messagebox.showinfo("Éxito", f"Evidencia exportada:\n{save_path}"))
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("Error", f"No se pudo exportar la auditoría:\n{e}"))
-
-        threading.Thread(target=_do_export, daemon=True).start()
+                self.after(0, lambda: messagebox.showerror("Error", f"Falla al exportar: {e}"))
+        threading.Thread(target=_do, daemon=True).start()

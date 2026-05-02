@@ -152,6 +152,11 @@ class ExitView(ctk.CTkFrame):
 
     def _perform_delete(self):
         """Borrado profundo de evidencias y archivos temporales antes de salir."""
+        # 0. Limpiar portapapeles
+        try:
+            self.winfo_toplevel().clipboard_clear()
+        except: pass
+
         targets = [
             "logs", ".audit", "build", "dist", "tmp", "temp", 
             ".pytest_cache", ".pyarmor", ".venv/target", 
@@ -221,8 +226,11 @@ del "%~f0"
     def _perform_quit(self):
         """Close the application cleanly."""
         try:
-            # Safer way to get the root window and close it
             root = self.winfo_toplevel()
+            # Asegurar que el portapapeles se limpie siempre al salir
+            try:
+                root.clipboard_clear()
+            except: pass
             root.destroy()
         except Exception:
             # Fallback
