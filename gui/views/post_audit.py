@@ -51,7 +51,7 @@ class PostAuditView(ctk.CTkFrame):
         # ── Telegram Card ─────────────────────────────────────────────────────
         make_section_header(self, "Exfiltración por Telegram", "✈️")
         tg_card = make_card(self)
-        tg_card.pack(fill="x", padx=PAD["lg"], pady=(0, PAD["md"]))
+        tg_card.pack(fill="x", padx=PAD["lg"], pady=(0, PAD["sm"])) # Reducimos pady de MD a SM
 
         tg_inner = ctk.CTkFrame(tg_card, fg_color="transparent")
         tg_inner.pack(fill="x", padx=PAD["md"], pady=PAD["md"])
@@ -83,7 +83,7 @@ class PostAuditView(ctk.CTkFrame):
         # ── Discord Card ──────────────────────────────────────────────────────
         make_section_header(self, "Exfiltración por Discord", "💬")
         dc_card = make_card(self)
-        dc_card.pack(fill="x", padx=PAD["lg"], pady=(0, PAD["md"]))
+        dc_card.pack(fill="x", padx=PAD["lg"], pady=(0, PAD["sm"])) # Reducimos pady
 
         dc_inner = ctk.CTkFrame(dc_card, fg_color="transparent")
         dc_inner.pack(fill="x", padx=PAD["md"], pady=PAD["md"])
@@ -108,7 +108,7 @@ class PostAuditView(ctk.CTkFrame):
         # ── Options Card ──────────────────────────────────────────────────────
         make_section_header(self, "Opciones de Envío", "🛡️")
         opt_card = make_card(self)
-        opt_card.pack(fill="x", padx=PAD["lg"], pady=(0, PAD["md"]))
+        opt_card.pack(fill="x", padx=PAD["lg"], pady=(0, PAD["sm"])) # Reducimos pady
 
         opt_inner = ctk.CTkFrame(opt_card, fg_color="transparent")
         opt_inner.pack(fill="x", padx=PAD["md"], pady=PAD["md"])
@@ -165,7 +165,8 @@ class PostAuditView(ctk.CTkFrame):
             border_width=1,
             border_color=COLORS["border"],
             state="disabled",
-            wrap="word"
+            wrap="word",
+            height=450 # Ahora sí, una consola de verdad
         )
         self._log.pack(fill="both", expand=True, padx=PAD["sm"], pady=PAD["sm"])
         self._log._textbox.tag_configure("OK",   foreground=COLORS["success"])
@@ -225,55 +226,95 @@ class PostAuditView(ctk.CTkFrame):
         )
 
     def _test_telegram(self):
-        token = self._tg_token.get()
-        chat  = self._tg_chat.get()
-        if not token or not chat:
-            self._log_line("ERR", "Telegram: falta token o chat ID.")
+        token = self._tg_token.get().strip()
+        chat  = self._tg_chat.get().strip()
+        
+        if not token or ":" not in token:
+            self._log_line("ERR", "Telegram: Token inválido (formato esperado ID:SEC)")
             return
+        if not chat:
+            self._log_line("ERR", "Telegram: Chat ID requerido")
+            return
+
         def _do():
             import requests
+            self.after(0, lambda: self._tg_status.configure(
+                text="  ⌛ Validando...  ", fg_color=COLORS["accent_dim"], text_color=COLORS["accent"]
+            ))
             try:
-                r = requests.get(
-                    f"https://api.telegram.org/bot{token}/getMe",
-                    timeout=10,
+                # 1. Verificar Token
+                r_me = requests.get(f"https://api.telegram.org/bot{token}/getMe", timeout=10)
+                if not r_me.ok:
+                    self.after(0, lambda: self._tg_status.configure(
+                        text="  ✗ Token Inválido  ", fg_color=COLORS["danger_dim"], text_color=COLORS["danger"]
+                    ))
+                    self.after(0, lambda: self._log_line("ERR", "Telegram: Token rechazado por la API (401)"))
+                    return
+
+                bot_name = r_me.json().get("result", {}).get("username", "?")
+                
+                # 2. Verificar Acceso al Chat
+                r_chat = requests.get(
+                    f"https://api.telegram.org/bot{token}/getChat",
+                    params={"chat_id": chat},
+                    timeout=10
                 )
-                if r.ok:
-                    name = r.json().get("result", {}).get("username", "?")
+                
+                if r_chat.ok:
+                    chat_title = r_chat.json().get("result", {}).get("title") or r_chat.json().get("result", {}).get("username", "Chat")
                     self.after(0, lambda: self._tg_status.configure(
-                        text=f"  ✓ @{name}  ", fg_color=COLORS["success_dim"], text_color=COLORS["success"]
+                        text=f"  ✓ @{bot_name} → {chat_title}  ", fg_color=COLORS["success_dim"], text_color=COLORS["success"]
                     ))
-                    self.after(0, lambda: self._log_line("OK", f"Telegram OK — bot: @{name}"))
+                    self.after(0, lambda: self._log_line("OK", f"Telegram Verificado: Bot @{bot_name} tiene acceso a '{chat_title}'"))
                 else:
+                    err_msg = r_chat.json().get("description", "Error desconocido")
                     self.after(0, lambda: self._tg_status.configure(
-                        text="  ✗ Error  ", fg_color=COLORS["danger_dim"], text_color=COLORS["danger"]
+                        text="  ✗ Sin Acceso al Chat  ", fg_color=COLORS["warning_dim"], text_color=COLORS["warning"]
                     ))
-                    self.after(0, lambda: self._log_line("ERR", f"Telegram error: {r.status_code}"))
+                    self.after(0, lambda: self._log_line("WARN", f"Telegram: Bot @{bot_name} validado, pero no tiene acceso al Chat ID: {err_msg}"))
+
             except Exception as e:
-                self.after(0, lambda: self._log_line("ERR", f"Telegram: {e}"))
+                self.after(0, lambda: self._log_line("ERR", f"Telegram: Error de red/conexión: {e}"))
+                self.after(0, lambda: self._tg_status.configure(text="  ✗ Error Red  ", fg_color=COLORS["danger_dim"], text_color=COLORS["danger"]))
+
         threading.Thread(target=_do, daemon=True).start()
 
     def _test_discord(self):
-        hook = self._dc_hook.get()
-        if not hook:
-            self._log_line("ERR", "Discord: falta webhook URL.")
+        hook = self._dc_hook.get().strip()
+        if not hook or not hook.startswith("https://discord.com/api/webhooks/"):
+            self._log_line("ERR", "Discord: URL de Webhook inválida (formato incorrecto)")
             return
+
         def _do():
             import requests
+            self.after(0, lambda: self._dc_status.configure(
+                text="  ⌛ Validando...  ", fg_color=COLORS["accent_dim"], text_color=COLORS["accent"]
+            ))
             try:
+                # Los webhooks de Discord permiten GET para ver metadatos
                 r = requests.get(hook, timeout=10)
                 if r.ok:
-                    name = r.json().get("name", "?")
+                    data = r.json()
+                    name = data.get("name", "Webhook")
+                    guild_id = data.get("guild_id", "Desconocido")
                     self.after(0, lambda: self._dc_status.configure(
-                        text=f"  ✓ #{name}  ", fg_color=COLORS["success_dim"], text_color=COLORS["success"]
+                        text=f"  ✓ {name} (GID:{guild_id[:6]})  ", fg_color=COLORS["success_dim"], text_color=COLORS["success"]
                     ))
-                    self.after(0, lambda: self._log_line("OK", f"Discord OK — canal: #{name}"))
+                    self.after(0, lambda: self._log_line("OK", f"Discord Verificado: Webhook '{name}' activo en servidor ID {guild_id}"))
+                elif r.status_code == 404:
+                    self.after(0, lambda: self._dc_status.configure(
+                        text="  ✗ No Existe (404)  ", fg_color=COLORS["danger_dim"], text_color=COLORS["danger"]
+                    ))
+                    self.after(0, lambda: self._log_line("ERR", "Discord: El Webhook no existe o fue eliminado (404)"))
                 else:
                     self.after(0, lambda: self._dc_status.configure(
-                        text="  ✗ Error  ", fg_color=COLORS["danger_dim"], text_color=COLORS["danger"]
+                        text=f"  ✗ Error {r.status_code}  ", fg_color=COLORS["danger_dim"], text_color=COLORS["danger"]
                     ))
-                    self.after(0, lambda: self._log_line("ERR", f"Discord error: {r.status_code}"))
+                    self.after(0, lambda: self._log_line("ERR", f"Discord: Error en Webhook (Status {r.status_code})"))
             except Exception as e:
-                self.after(0, lambda: self._log_line("ERR", f"Discord: {e}"))
+                self.after(0, lambda: self._log_line("ERR", f"Discord: Error de red: {e}"))
+                self.after(0, lambda: self._dc_status.configure(text="  ✗ Error Red  ", fg_color=COLORS["danger_dim"], text_color=COLORS["danger"]))
+
         threading.Thread(target=_do, daemon=True).start()
 
     def _send_telegram(self):
