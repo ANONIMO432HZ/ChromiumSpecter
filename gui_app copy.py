@@ -76,8 +76,8 @@ class App(ctk.CTk):
         logo_frame = ctk.CTkFrame(self._sidebar, fg_color="transparent")
         logo_frame.pack(fill="x", padx=20, pady=30)
         
-        make_label(logo_frame, "DECRYPT", style="heading", color=COLORS["accent"]).pack(anchor="w")
-        make_label(logo_frame, "CHROMIUM SUITE", style="small", color=COLORS["text_secondary"]).pack(anchor="w")
+        make_label(logo_frame, "ChromiumSpecter", style="heading", color=COLORS["accent"]).pack(anchor="w")
+        make_label(logo_frame, "TACTICAL AUDITOR SUITE", style="small", color=COLORS["text_secondary"]).pack(anchor="w")
 
         # Nav Buttons
         self._nav_buttons: dict[str, ctk.CTkButton] = {}
@@ -169,5 +169,12 @@ class App(ctk.CTk):
 
 
 if __name__ == "__main__":
-    app = App()
-    app.mainloop()
+    # Si se pasan argumentos (ej. desde el Builder interno), actuar como proxy de build.py
+    if len(sys.argv) > 1 and sys.argv[1].endswith("build.py"):
+        import build
+        # Quitar el script proxy de los args para que argparse no se rompa
+        sys.argv.pop(1)
+        build.main()
+    else:
+        app = App()
+        app.mainloop()

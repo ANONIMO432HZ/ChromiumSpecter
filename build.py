@@ -192,8 +192,11 @@ Ejemplos de uso:
         pyi_cmd.extend(["--version-file", v_file])
         
         # --- Universal Dependency Injection ---
-        # Agregamos imports críticos comunes para que no falten en el EXE final
-        hidden_imports = ["win32crypt", "Cryptodome", "requests", "customtkinter"]
+        # Agregamos imports críticos para que el EXE sea un Constructor Autónomo
+        hidden_imports = [
+            "win32crypt", "Cryptodome", "requests", "customtkinter",
+            "PyInstaller", "pyarmor", "pyarmor.cli"
+        ]
         for imp in hidden_imports:
             pyi_cmd.extend(["--hidden-import", imp])
             

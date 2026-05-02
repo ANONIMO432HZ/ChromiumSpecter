@@ -213,7 +213,7 @@ class AuditView(ctk.CTkScrollableFrame):
         self._stop_btn.configure(state="normal")
         self._status_badge.configure(text="  PROCESANDO  ", fg_color=COLORS["accent_dim"], text_color=COLORS["accent"])
         self._clear_log()
-        self._log_line("ACCENT", "Iniciando auditoría profunda de credenciales…")
+        self._log_line("SYSTEM", "Iniciando auditoría profunda de credenciales…")
         threading.Thread(target=self._audit_worker, daemon=True).start()
 
     def _stop_audit(self):
@@ -228,11 +228,11 @@ class AuditView(ctk.CTkScrollableFrame):
 
     def _audit_worker(self):
         import time
-        from main import _setup_environment, ChromiumDecryptor
+        from main import ChromiumDecryptor
 
-        # No manual timeout extraction anymore, uses CONFIG default
-
-        out_dir = _setup_environment(self._outdir_var.get() or ".audit")
+        out_dir_str = self._outdir_var.get() or ".audit"
+        out_dir = Path(out_dir_str)
+        out_dir.mkdir(parents=True, exist_ok=True)
         browser_filter = None if self._browser_var.get() == "Todos" else self._browser_var.get()
         t0 = time.time()
 
@@ -256,9 +256,12 @@ class AuditView(ctk.CTkScrollableFrame):
             if results:
                 valid = [r for r in results if r[2].startswith(("http://", "https://"))]
                 filtered = [r for r in results if not r[2].startswith(("http://", "https://"))]
-                self._stats["total"], self._stats["filtered"] = len(valid), len(filtered)
+                browsers_found = len(set(r[0] for r in results))
+                self._stats["total"]    = len(valid)
+                self._stats["filtered"] = len(filtered)
+                self._stats["browsers"] = browsers_found
             else:
-                self._stats["total"] = 0
+                self._stats["total"] = self._stats["filtered"] = self._stats["browsers"] = 0
 
             self._after_call(lambda: self._set_duration(elapsed))
             self.after(0, lambda: self._finish_audit_full(results, hp, cp))

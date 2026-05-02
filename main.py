@@ -394,7 +394,7 @@ def main():
         try: ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
         except: pass
     
-    out = _setup_environment(args.output_dir)
+    out = _setup_environment(args.output_dir, start_logging=True)
     if args.clean:
         for ext in ("*.html", "*.csv", "*.json"):
             for f in out.glob(ext): f.unlink()

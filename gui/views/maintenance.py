@@ -155,11 +155,18 @@ class MaintenanceView(ctk.CTkFrame):
     # ── Dependency checker ────────────────────────────────────────────────────
 
     def _log_dep(self, msg: str, clear=False):
-        from main import logger
-        logger.info(f"[DEPS] {msg}")
-        self.after(0, self._load_log)
+        # Solo escribir al log si tiene handlers activos (post-auditoría)
+        import logging
+        root = logging.getLogger()
+        if root.handlers:
+            from main import logger
+            logger.info(f"[DEPS] {msg}")
+            self.after(0, self._load_log)
+        # El panel de dependencias siempre muestra en consola interna via badge
 
     def _check_deps(self):
+        # Resetear estado antes de re-verificar para evitar acumulación
+        self._missing_deps.clear()
         def _do():
             import importlib
             DEPS = [
@@ -296,8 +303,8 @@ class MaintenanceView(ctk.CTkFrame):
             from main import logger
             logger.error(f"Error en limpieza forzada: {e}")
 
-        # 2. Re-levantar el sistema
-        _setup_environment(str(d))
+        # 2. Re-levantar el sistema en modo pasivo (sin bloquear el log)
+        _setup_environment(str(d), start_logging=False)
         self._tail_active = True
         self._last_log_size = 0
         self._schedule_tail()
