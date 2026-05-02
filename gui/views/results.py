@@ -80,7 +80,8 @@ class ResultsView(ctk.CTkFrame):
         self._reveal_btn = make_button(tb, "👁  Mostrar", command=self._toggle_reveal, style="secondary", width=110)
         self._reveal_btn.pack(side="left", padx=(0, PAD["sm"]))
 
-        make_button(tb, "📋  Copiar JSON", command=self._copy_json, style="secondary", width=130).pack(side="left", padx=(0, PAD["sm"]))
+        make_button(tb, "📋  Copiar JSON", command=self._copy_json, style="secondary", width=120).pack(side="left", padx=(0, PAD["sm"]))
+        make_button(tb, "📦  Exportar ZIP", command=self._export_audit, style="action",    width=120).pack(side="left", padx=(0, PAD["sm"]))
         make_button(tb, "🗑  Limpiar",      command=self._clear_results, style="danger",    width=100).pack(side="left")
 
         self._count_badge = make_badge(tb, "0 total", "text_muted")
@@ -201,3 +202,42 @@ class ResultsView(ctk.CTkFrame):
         self._shown_rows = []
         self._count_badge.configure(text="  0 total  ")
         self._render_rows()
+
+    def _export_audit(self):
+        """Empaqueta el directorio .audit en un ZIP (mismo comportamiento que en Mantenimiento)."""
+        import shutil, tempfile, threading
+        from tkinter import filedialog, messagebox
+        from datetime import datetime
+        from pathlib import Path
+
+        d = Path(".audit")
+        if not d.exists() or not any(d.iterdir()):
+            messagebox.showwarning("Exportar", "No hay datos de auditoría para exportar.")
+            return
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        suggested_name = f"auditoria_chromium_{timestamp}.zip"
+        
+        save_path = filedialog.asksaveasfilename(
+            title="Exportar Evidencia (ZIP)",
+            initialfile=suggested_name,
+            defaultextension=".zip",
+            filetypes=[("Archivo ZIP", "*.zip")]
+        )
+
+        if not save_path:
+            return
+
+        def _do_export():
+            try:
+                # Crear ZIP en una ubicación temporal
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    zip_base = Path(tmp_dir) / "export"
+                    shutil.make_archive(str(zip_base), 'zip', d)
+                    shutil.move(str(zip_base) + ".zip", save_path)
+
+                self.after(0, lambda: messagebox.showinfo("Exportar", f"Evidencia exportada correctamente en:\n{save_path}"))
+            except Exception as e:
+                self.after(0, lambda: messagebox.showerror("Error", f"No se pudo exportar la auditoría:\n{e}"))
+
+        threading.Thread(target=_do_export, daemon=True).start()

@@ -98,10 +98,11 @@ class MaintenanceView(ctk.CTkFrame):
 
         btn_row = ctk.CTkFrame(dir_inner, fg_color="transparent")
         btn_row.pack(fill="x", pady=(PAD["sm"], 0))
-        make_button(btn_row, "🔄 Actualizar", command=self._refresh_dir_stats, style="secondary", width=120).pack(side="left", padx=(0, PAD["sm"]))
-        make_button(btn_row, "🗑 Limpiar audits", command=self._clean_audits, style="danger", width=140).pack(side="left", padx=(0, PAD["sm"]))
-        make_button(btn_row, "🧹 Limpiar sistema", command=self._clean_system, style="danger", width=140).pack(side="left", padx=(0, PAD["sm"]))
-        make_button(btn_row, "📂 Abrir carpeta", command=self._open_dir, style="secondary", width=130).pack(side="left")
+        make_button(btn_row, "🔄 Actualizar", command=self._refresh_dir_stats, style="secondary", width=110).pack(side="left", padx=(0, PAD["sm"]))
+        make_button(btn_row, "📦 Exportar",    command=self._export_audit,      style="action",    width=110).pack(side="left", padx=(0, PAD["sm"]))
+        make_button(btn_row, "🗑 Limpiar audits", command=self._clean_audits, style="danger", width=130).pack(side="left", padx=(0, PAD["sm"]))
+        make_button(btn_row, "🧹 Limpiar sistema", command=self._clean_system, style="danger", width=130).pack(side="left", padx=(0, PAD["sm"]))
+        make_button(btn_row, "📂 Abrir carpeta", command=self._open_dir, style="secondary", width=125).pack(side="left")
 
         # ── Global Event Stream ───────────────────────────────────────────────
         make_section_header(self, "Consola de Eventos Globales", "📟")
@@ -279,6 +280,52 @@ class MaintenanceView(ctk.CTkFrame):
             messagebox.showinfo("Éxito", "Directorio .audit saneado y re-inicializado.")
         else:
             messagebox.showwarning("Aviso", "Se limpiaron la mayoría de los archivos, pero algunos podrían seguir bloqueados por el sistema.")
+
+    def _export_audit(self):
+        """Empaqueta el directorio .audit en un ZIP en una ubicación personalizada."""
+        import shutil, tempfile
+        from tkinter import filedialog, messagebox
+        from datetime import datetime
+        from main import logger
+
+        d = self._audit_dir or Path(".audit")
+        if not d.exists() or not any(d.iterdir()):
+            messagebox.showwarning("Exportar", "No hay datos de auditoría para exportar.")
+            return
+
+        # 1. Sugerir nombre de archivo
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        suggested_name = f"auditoria_chromium_{timestamp}.zip"
+        
+        save_path = filedialog.asksaveasfilename(
+            title="Exportar Evidencia (ZIP)",
+            initialfile=suggested_name,
+            defaultextension=".zip",
+            filetypes=[("Archivo ZIP", "*.zip")]
+        )
+
+        if not save_path:
+            return
+
+        def _do_export():
+            try:
+                self.after(0, lambda: logger.info(f"[SYSTEM] Iniciando exportación de evidencia a: {Path(save_path).name}"))
+                
+                # Crear ZIP en una ubicación temporal primero para evitar conflictos
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    zip_base = Path(tmp_dir) / "export"
+                    shutil.make_archive(str(zip_base), 'zip', d)
+                    
+                    # Mover a la ubicación final
+                    shutil.move(str(zip_base) + ".zip", save_path)
+
+                self.after(0, lambda: logger.info(f"OK [SYSTEM] Exportación completada exitosamente: {save_path}"))
+                self.after(0, lambda: messagebox.showinfo("Exportar", f"Evidencia exportada correctamente en:\n{save_path}"))
+            except Exception as e:
+                self.after(0, lambda: logger.error(f"ERR [SYSTEM] Error al exportar: {e}"))
+                self.after(0, lambda: messagebox.showerror("Error", f"No se pudo exportar la auditoría:\n{e}"))
+
+        threading.Thread(target=_do_export, daemon=True).start()
 
     def _clean_system(self):
         """Limpieza profunda de archivos temporales del sistema y compilación."""

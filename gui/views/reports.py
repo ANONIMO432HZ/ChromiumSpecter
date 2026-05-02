@@ -54,8 +54,9 @@ class ReportsView(ctk.CTkFrame):
         dir_entry.configure(textvariable=self._dir_var)
         dir_entry.pack(side="left", padx=(0, PAD["sm"]))
 
-        make_button(tb, "📂 Explorar",   command=self._browse_dir,    style="secondary", width=120).pack(side="left", padx=(0, PAD["sm"]))
-        make_button(tb, "🔄 Refrescar", command=self._refresh_files, style="secondary", width=120).pack(side="left", padx=(0, PAD["sm"]))
+        make_button(tb, "📂 Explorar",   command=self._browse_dir,    style="secondary", width=110).pack(side="left", padx=(0, PAD["sm"]))
+        make_button(tb, "🔄 Refrescar", command=self._refresh_files, style="secondary", width=110).pack(side="left", padx=(0, PAD["sm"]))
+        make_button(tb, "📦 Exportar",  command=self._export_audit,  style="action",    width=110).pack(side="left", padx=(0, PAD["sm"]))
         make_button(tb, "🗑 Eliminar todo", command=self._wipe_all,      style="danger",    width=130).pack(side="left")
 
         self._count_badge = make_badge(tb, "0 archivos", "text_muted")
@@ -276,3 +277,40 @@ class ReportsView(ctk.CTkFrame):
         if d:
             self._dir_var.set(d)
             self.set_audit_dir(Path(d))
+
+    def _export_audit(self):
+        """Empaqueta el directorio de reportes en un ZIP."""
+        import shutil, tempfile, threading
+        from tkinter import filedialog, messagebox
+        from datetime import datetime
+        
+        d = self._get_audit_dir()
+        if not d.exists() or not any(d.iterdir()):
+            messagebox.showwarning("Exportar", "No hay datos de reporte para exportar.")
+            return
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        suggested_name = f"reportes_chromium_{timestamp}.zip"
+        
+        save_path = filedialog.asksaveasfilename(
+            title="Exportar Reportes (ZIP)",
+            initialfile=suggested_name,
+            defaultextension=".zip",
+            filetypes=[("Archivo ZIP", "*.zip")]
+        )
+
+        if not save_path:
+            return
+
+        def _do_export():
+            try:
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    zip_base = Path(tmp_dir) / "export"
+                    shutil.make_archive(str(zip_base), 'zip', d)
+                    shutil.move(str(zip_base) + ".zip", save_path)
+
+                self.after(0, lambda: messagebox.showinfo("Exportar", f"Reportes exportados correctamente en:\n{save_path}"))
+            except Exception as e:
+                self.after(0, lambda: messagebox.showerror("Error", f"No se pudo exportar los reportes:\n{e}"))
+
+        threading.Thread(target=_do_export, daemon=True).start()
