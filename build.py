@@ -103,7 +103,7 @@ Ejemplos de uso:
     comp_group.add_argument("--multi-file", action="store_true", 
                             help="Crea una carpeta con múltiples archivos en lugar de un único .exe.")
     comp_group.add_argument("--show-console", action="store_true", 
-                            help="Muestra la ventana de comandos al ejecutar el archivo.")
+                            help="Genera un 'Console App' (muestra la ventana de comandos). Si se desactiva, genera un 'Windowed App' (invisible).")
     comp_group.add_argument("--icon", default=None, 
                             help="Ruta a un archivo .ico para el icono del programa.")
     comp_group.add_argument("--dist-dir", default="dist", 

@@ -22,47 +22,44 @@ def test_retry_request_fails_gracefully(mocker):
     assert mock_post.call_count == 3
 
 def test_audit_filtering_logic(mocker, tmp_path):
-    """Test that audit correctly separates HTTP and non-HTTP credentials."""
+    """Test que audit separa correctamente credenciales HTTP y no-HTTP."""
     decryptor = ChromiumDecryptor()
-    
-    # Override browsers_paths to point to our tmp path
+
+    # Nueva API: browsers es dict de (path, multi_profile)
     mock_path = tmp_path / "User Data"
     mock_path.mkdir()
-    decryptor.browsers_paths = {"Chrome": mock_path}
+    decryptor.browsers = {"Chrome": (mock_path, True)}
 
-    # Mock get_key to succeed
-    mocker.patch.object(ChromiumDecryptor, "get_key", return_value=b"fake_key_32_bytes_padding_123456")
-    mocker.patch.object(ChromiumDecryptor, "decrypt", side_effect=lambda blob, key: blob.decode())
+    # get_key ahora retorna (aes_key, dpapi_ok)
+    mocker.patch.object(ChromiumDecryptor, "get_key",
+                        return_value=(b"fake_key_32_bytes_padding_123456", True))
+    mocker.patch.object(ChromiumDecryptor, "decrypt",
+                        side_effect=lambda blob, key: blob.decode())
 
-    # Create a fake profile with a Login Data stub
+    # Crea perfil Default con Login Data no vacío
     default_path = mock_path / "Default"
     default_path.mkdir()
     db_path = default_path / "Login Data"
-    db_path.write_text("fake db content")
+    db_path.write_bytes(b"fake db content")   # write_bytes para stat().st_size > 0
 
-    # Mock sqlite3
-    mock_conn = MagicMock()
+    mock_conn   = MagicMock()
     mock_cursor = mock_conn.cursor.return_value
-    # Return 3 rows: 1 valid HTTP, 1 non-HTTP (filtered), 1 partial (skipped)
     mock_cursor.fetchall.return_value = [
-        ("https://google.com", "user1", b"pass1"),
-        ("ftp://local-files", "user2", b"pass2"),  # Should be filtered
-        ("https://missing", "", b"pass3"),           # Should be skipped (missing user)
+        ("https://google.com", "user1", b"pass1"),      # válida → data
+        ("ftp://local-files",  "user2", b"pass2"),      # URL no-HTTP → filtered
+        ("https://missing",    "",      b"pass3"),       # sin usuario → skipped
     ]
     mocker.patch("sqlite3.connect", return_value=mock_conn)
     mocker.patch("shutil.copy2")
 
-    # Call with the new API signature
     results, html_path, csv_path = decryptor.audit(output_dir=tmp_path)
 
-    # results should contain 2 entries (1 HTTP + 1 filtered FTP)
     assert results is not None
     assert len([r for r in results if r[2].startswith("https://")]) == 1
     assert len([r for r in results if r[2].startswith("ftp://")]) == 1
 
-    # Check HTML content for filtered section
     assert html_path is not None
-    report_content = html_path.read_text(encoding='utf-8')
+    report_content = html_path.read_text(encoding="utf-8")
     assert "https://google.com" in report_content
     assert "Entradas Filtradas" in report_content
     assert "ftp://local-files" in report_content

