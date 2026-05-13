@@ -1,6 +1,8 @@
 # 🛠️ V20 (App-Bound Encryption) Implementation Plan
 
-This document outlines the technical strategy for integrating Chrome **v20** decryption support into the ChromiumSpecter suite, following the patterns found in `chrome_v20_decryption` and `Invoke-PowerChrome`.
+This document outlines the technical strategy for integrating Chrome **v20** decryption support into the ChromiumSpecter suite, following the patterns and research from the following repositories:
+- [Invoke-PowerChrome](https://github.com/The-Viper-One/Invoke-PowerChrome)
+- [chrome_v20_decryption](https://github.com/runassu/chrome_v20_decryption)
 
 ---
 
