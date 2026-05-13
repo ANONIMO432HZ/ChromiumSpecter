@@ -78,3 +78,130 @@ Console hiding is deferred until after argument parsing and module imports. This
 
 ### Solution
 This is a design choice to ensure robustness. If you need it to be 100% invisible from millisecond zero, you must compile using `python build.py --noconsole`.
+
+---
+
+## 5. Passwords show strange symbols or `[AES-GCM Error]`
+
+### Symptom
+In the HTML/CSV report, the password field shows strange characters, or values like `[AES-GCM Error]`, `[No AES Key]`, or `[Not Decrypted]`.
+
+### Cause
+Chromium uses **two different encryption schemes** that can coexist in the same profile database:
+
+1. **AES-GCM (v80+)**: Blobs have the `v10` prefix and require the master key from the `Local State` file.
+2. **DPAPI Legacy (<v80)**: Blobs encrypted directly by Windows, with no prefix.
+
+The error markers indicate:
+
+| Marker | Cause |
+| :--- | :--- |
+| `[No AES Key]` | `v10` blob but `Local State` could not be read. |
+| `[Invalid Blob]` | The `v10` blob is truncated or corrupt. |
+| `[AES-GCM Error]` | The key exists but does not decrypt this blob (and DPAPI also failed). |
+| `[Not Decrypted]` | Legacy blob without prefix that DPAPI cannot decrypt in this session. |
+
+### Solution
+1. Run with **Administrator** permissions to ensure DPAPI can access the current user's keys.
+2. If the browser is open, use **`--auto-kill`** to close the process and release the database lock.
+3. If you see `[No AES Key]`, the profile's `Local State` might be corrupt or belong to another Windows user.
+
+---
+
+## 6. "Permission Denied" Error when deleting logs or reports
+
+### Symptom
+The Dashboard or script fails when trying to clean the `.audit/` folder or the `pentest_audit.log` file.
+
+### Cause
+Windows blocks files that another process is writing to. If an audit failed halfway, the log handler might have remained open.
+
+### Solution
+1. Ensure no other instance is running (check Task Manager).
+2. The suite includes a "Logger Guard" that closes streams before attempting to delete. If the problem persists, restart the application.
+
+---
+
+## 7. Self-Destruct did not delete the .exe
+
+### Symptom
+You activated `--self-destruct` but the file remains in the folder after execution.
+
+### Cause
+The Windows `del` command can fail if the file is locked by:
+1. Windows Explorer (if you have the folder open and the file selected).
+2. An Antivirus scanning the binary at that moment.
+
+### Solution
+Wait a few seconds. The command has a 3s delay to allow the main process to exit before deleting itself. Avoid having the output folder open in Explorer during testing.
+
+---
+
+## 8. Chrome does not detect profiles even though they are installed (`0 profiles found`)
+
+### Symptom
+The log shows `Found 0 profiles to process.` but you have Chrome installed with saved passwords.
+
+### Possible Cause 1 — Profile not detected by name
+The detector looks for folders named `Default`, `Guest Profile`, or `Profile N`. If your profile has another name (rare, but possible in modified installations), it won't be found.
+
+### Possible Cause 2 — Empty database
+The suite validates that the `Login Data` file has `size > 0`. A newly created profile or one without saved passwords has an empty DB and is discarded.
+
+### Possible Cause 3 — Browser locking the DB
+Chrome has an exclusive lock on `Login Data` while it is running.
+
+### Solution
+- Activate **`--auto-kill`** (or the equivalent option in the Builder) to close the browser before auditing.
+- Manually verify that the `%LOCALAPPDATA%\Google\Chrome\User Data\Default\Login Data` folder exists and is not empty.
+
+---
+
+## 9. "Database is locked" Error (SQLite)
+
+### Symptom
+Even using `--auto-kill`, the log shows that the `Login Data` database is locked and cannot be copied.
+
+### Cause
+This typically occurs when a cloud synchronization service (like **OneDrive**, **Google Drive**, or **Dropbox**) is attempting to back up the browser profile at that exact moment, keeping a handle open on the file.
+
+### Solution
+1. Temporarily pause cloud file synchronization.
+2. If the problem persists, check for "orphan" Chrome or Edge processes in Task Manager that `--auto-kill` might have missed (sometimes happens with extension sub-processes).
+
+---
+
+## 10. Heuristic Detection (AV False Positives)
+
+### Symptom
+Your obfuscated and signed binary is deleted by the Antivirus immediately after being generated or when attempting to run it.
+
+### Cause
+The combination of **bundling (PyInstaller)** + **obfuscation (PyArmor)** + **network behavior (Webhooks)** is a pattern that AVs flag as suspicious by default (heuristic detection).
+
+### Solution
+1. **Don't use the default name**: Change the filename to something generic like `WinSystemTray.exe`.
+2. **Change the Icon**: Using the default Python icon is an immediate red flag. Use one from a known application.
+3. **Increase Initial Delay**: Set a delay of at least 30-60 seconds in the Builder. Many AV sandboxes give up if they see no activity in the first few seconds.
+4. **Metadata Spoofing**: Make sure to fill in the Version, Company, and Description fields in the Builder to make the binary look legitimate.
+
+---
+
+## 11. Dashboard won't open (ModuleNotFoundError)
+
+### Symptom
+When running `python gui_app.py`, you receive an error saying that the `customtkinter` or `PIL` module cannot be found.
+
+### Cause
+GUI dependencies are missing from your current environment.
+
+### Solution
+Install the full set of dependencies:
+```powershell
+pip install -r requirements.txt
+```
+If the error persists specifically with `PIL` (Pillow), reinstall it manually:
+```powershell
+pip install --force-reinstall Pillow
+```
+

