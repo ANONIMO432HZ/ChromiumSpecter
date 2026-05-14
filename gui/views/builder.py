@@ -279,7 +279,7 @@ class BuilderView(ctk.CTkScrollableFrame):
         self._obfuscate_var     = ctk.BooleanVar(value=False)
         self._show_console_var  = ctk.BooleanVar(value=False)
         self._multifile_var     = ctk.BooleanVar(value=False)
-        self._uac_var           = ctk.BooleanVar(value=False)
+        self._uac_var           = ctk.BooleanVar(value=True)
         self._clean_var         = ctk.BooleanVar(value=True)
         self._upx_var           = ctk.BooleanVar(value=False)
         self._self_destruct_var = ctk.BooleanVar(value=False)

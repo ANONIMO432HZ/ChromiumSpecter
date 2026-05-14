@@ -116,6 +116,9 @@ class AuditView(ctk.CTkScrollableFrame):
         self._skip_csv_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(r2, text="Sin CSV", variable=self._skip_csv_var, font=FONTS["body"]).pack(side="left", padx=(0, PAD["lg"]))
 
+        self._gen_json_var = ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(r2, text="Generar JSON", variable=self._gen_json_var, font=FONTS["body"]).pack(side="left", padx=(0, PAD["lg"]))
+
         self._auto_kill_var = ctk.BooleanVar(value=True) 
         ctk.CTkCheckBox(r2, text="Auto-Kill (Fallback)", variable=self._auto_kill_var, font=FONTS["body"]).pack(side="left", padx=(0, PAD["lg"]))
 
@@ -159,7 +162,17 @@ class AuditView(ctk.CTkScrollableFrame):
         self._log._textbox.tag_configure("SYSTEM",  foreground=COLORS["accent"])
         self._log._textbox.tag_configure("TIMESTAMP", foreground=COLORS["text_muted"])
 
+        import ctypes
+        try:
+            is_admin = ctypes.windll.shell32.IsUserAnAdmin()
+        except:
+            is_admin = False
+
         self._log_line("SYSTEM", "  Chromium Decryptor Suite — Listo para operar\n")
+        if not is_admin:
+            self._log_line("WARN", "  [!] ATENCIÓN: El sistema no tiene privilegios de Administrador.")
+            self._log_line("WARN", "  [!] Chrome v127+ (V20 App-Bound) requiere ADMIN para desencriptar.\n")
+            
         self._log_line("TIMESTAMP", "  Ajuste los parámetros y presione 'Comenzar Escaneo'.\n")
 
     # ── Métodos ───────────────────────────────────────────────────────────────
@@ -252,6 +265,13 @@ class AuditView(ctk.CTkScrollableFrame):
                 webhook_timeout=15 # Standard for local audit
             )
 
+            hp, cp, jp = hp, cp, None
+            if results and self._gen_json_var.get():
+                import json
+                jp = out_dir / f"audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                with open(jp, 'w', encoding='utf-8') as f:
+                    json.dump(results, f, indent=4, ensure_ascii=False)
+
             elapsed = time.time() - t0
             if results:
                 valid = [r for r in results if r[2].startswith(("http://", "https://"))]
@@ -264,15 +284,15 @@ class AuditView(ctk.CTkScrollableFrame):
                 self._stats["total"] = self._stats["filtered"] = self._stats["browsers"] = 0
 
             self._after_call(lambda: self._set_duration(elapsed))
-            self.after(0, lambda: self._finish_audit_full(results, hp, cp))
+            self.after(0, lambda: self._finish_audit_full(results, hp, cp, jp))
         except Exception as e:
             self.after(0, lambda: self._log_line("ERR", f"Error crítico: {e}"))
             self.after(0, self._finish_audit)
 
-    def _finish_audit_full(self, results, hp, cp):
+    def _finish_audit_full(self, results, hp, cp, jp):
         self._finish_audit()
         if self._on_results_cb:
-            self._on_results_cb(results, hp, cp, auto_exfiltrate=self._auto_exfiltrate_var.get())
+            self._on_results_cb(results, hp, cp, jp, auto_exfiltrate=self._auto_exfiltrate_var.get())
             badge_color = "success" if self._stats["total"] else "warning"
             badge_txt = f"  {self._stats['total']} DATOS  " if self._stats["total"] else "  VACÍO  "
             self._after_call(lambda: self._status_badge.configure(text=badge_txt, fg_color=COLORS[f"{badge_color}_dim"], text_color=COLORS[badge_color]))

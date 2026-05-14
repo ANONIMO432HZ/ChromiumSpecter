@@ -158,9 +158,9 @@ class ExitView(ctk.CTkFrame):
         except: pass
 
         targets = [
-            "logs", ".audit", "build", "dist", "tmp", "temp", 
+            "logs", ".audit", "build", "dist", "tmp", "temp", "test_output",
             ".pytest_cache", ".pyarmor", ".venv/target", 
-            "gui/__pycache__", "gui/views/__pycache__",
+            "gui/__pycache__", "gui/views/__pycache__", "modules/__pycache__",
             "_main_build_patched.py", "_main_backup.py", "main_patched.py"
         ]
 

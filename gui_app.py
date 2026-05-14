@@ -101,8 +101,20 @@ class App(ctk.CTk):
             self._nav_buttons[key] = btn
 
         # Footer info
-        version_lbl = make_label(self._sidebar, "v2.1.0-PRO", style="tiny", color=COLORS["text_muted"])
-        version_lbl.pack(side="bottom", pady=20)
+        footer_frame = ctk.CTkFrame(self._sidebar, fg_color="transparent")
+        footer_frame.pack(side="bottom", fill="x", pady=20)
+        
+        import ctypes
+        try:
+            is_admin = ctypes.windll.shell32.IsUserAnAdmin()
+        except:
+            is_admin = False
+            
+        admin_text = "🛡️ ADMIN" if is_admin else "⚠ USER MODE"
+        admin_color = COLORS["danger"] if is_admin else COLORS["warning"]
+        
+        make_label(footer_frame, admin_text, style="tiny", color=admin_color).pack()
+        make_label(footer_frame, "v2.1.0-PRO (V20 Ready)", style="tiny", color=COLORS["text_muted"]).pack()
 
     def _build_main_container(self):
         self._views_container = ctk.CTkFrame(self, fg_color=COLORS["bg_root"], corner_radius=0)
@@ -158,13 +170,13 @@ class App(ctk.CTk):
 
     # ── Logic Handlers ────────────────────────────────────────────────────────
 
-    def _on_audit_complete(self, results, html_path, csv_path, auto_exfiltrate=False):
+    def _on_audit_complete(self, results, html_path, csv_path, json_path=None, auto_exfiltrate=False):
         """Bridge results from Audit tab to Results tab."""
         self._views["results"].load_results(results)
         # Notify reports tab to refresh
         self._views["reports"].set_audit_dir(self._audit_dir)
         # Inject paths into Post-Audit tab
-        self._views["post_audit"].set_report_paths(html_path, csv_path)
+        self._views["post_audit"].set_report_paths(html_path, csv_path, json_path)
         
         if auto_exfiltrate:
             self._views["post_audit"].trigger_auto_exfiltrate()

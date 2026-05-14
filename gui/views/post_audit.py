@@ -39,9 +39,9 @@ class PostAuditView(ctk.CTkScrollableFrame):
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    def set_report_paths(self, html_path, csv_path):
+    def set_report_paths(self, html_path, csv_path, json_path=None):
         """Inject report paths after an audit completes."""
-        self._report_paths = [Path(p) for p in (html_path, csv_path) if p and Path(p).exists()]
+        self._report_paths = [Path(p) for p in (html_path, csv_path, json_path) if p and Path(p).exists()]
         count = len(self._report_paths)
         if count:
             self._reports_badge.configure(

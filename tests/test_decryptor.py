@@ -148,18 +148,18 @@ def test_decrypt_mixed_profile_scenario(mocker):
 
 def test_v20_token_manager_revert_to_self(mocker):
     """Verifica que RevertToSelf se llame siempre, incluso si Impersonate falla."""
-    mocker.patch("chrome_v20_decryption.v20_decryptor.get_winlogon_pid", return_value=1234)
-    mocker.patch("chrome_v20_decryption.v20_decryptor.OpenProcessToken", return_value=1)
-    mocker.patch("chrome_v20_decryption.v20_decryptor.LookupPrivilegeValueW", return_value=1)
-    mocker.patch("chrome_v20_decryption.v20_decryptor.AdjustTokenPrivileges", return_value=1)
-    mocker.patch("chrome_v20_decryption.v20_decryptor.kernel32.OpenProcess", return_value=1)
-    mocker.patch("chrome_v20_decryption.v20_decryptor.DuplicateTokenEx", return_value=1)
-    mocker.patch("chrome_v20_decryption.v20_decryptor.kernel32.CloseHandle")
+    mocker.patch("modules.chrome_v20_decryption.v20_decryptor.get_winlogon_pid", return_value=1234)
+    mocker.patch("modules.chrome_v20_decryption.v20_decryptor.OpenProcessToken", return_value=1)
+    mocker.patch("modules.chrome_v20_decryption.v20_decryptor.LookupPrivilegeValueW", return_value=1)
+    mocker.patch("modules.chrome_v20_decryption.v20_decryptor.AdjustTokenPrivileges", return_value=1)
+    mocker.patch("modules.chrome_v20_decryption.v20_decryptor.kernel32.OpenProcess", return_value=1)
+    mocker.patch("modules.chrome_v20_decryption.v20_decryptor.DuplicateTokenEx", return_value=1)
+    mocker.patch("modules.chrome_v20_decryption.v20_decryptor.kernel32.CloseHandle")
     
-    mock_impersonate = mocker.patch("chrome_v20_decryption.v20_decryptor.ImpersonateLoggedOnUser", return_value=0) # Fails
-    mock_revert = mocker.patch("chrome_v20_decryption.v20_decryptor.RevertToSelf")
+    mock_impersonate = mocker.patch("modules.chrome_v20_decryption.v20_decryptor.ImpersonateLoggedOnUser", return_value=0) # Fails
+    mock_revert = mocker.patch("modules.chrome_v20_decryption.v20_decryptor.RevertToSelf")
 
-    from chrome_v20_decryption.v20_decryptor import TokenManager
+    from modules.chrome_v20_decryption.v20_decryptor import TokenManager
 
     try:
         with TokenManager():
@@ -181,8 +181,8 @@ def test_v20_token_manager_revert_to_self(mocker):
 
 def test_get_v20_key_flag_3(mocker):
     """Verifica el flujo doble DPAPI y XOR para flag 3."""
-    mocker.patch("chrome_v20_decryption.v20_decryptor.TokenManager.__enter__")
-    mocker.patch("chrome_v20_decryption.v20_decryptor.TokenManager.__exit__")
+    mocker.patch("modules.chrome_v20_decryption.v20_decryptor.TokenManager.__enter__")
+    mocker.patch("modules.chrome_v20_decryption.v20_decryptor.TokenManager.__exit__")
     
     mock_win32crypt = MagicMock()
     # First unprotect returns fake system blob
@@ -203,13 +203,13 @@ def test_get_v20_key_flag_3(mocker):
         (None, fake_parsed_blob)
     ]
     
-    mocker.patch("chrome_v20_decryption.v20_decryptor.decrypt_with_cng", return_value=(b'D' * 32))
+    mocker.patch("modules.chrome_v20_decryption.v20_decryptor.decrypt_with_cng", return_value=(b'D' * 32))
     
     mock_cipher = MagicMock()
     mock_cipher.decrypt_and_verify.return_value = b"final_aes_master_key"
     mocker.patch("Cryptodome.Cipher.AES.new", return_value=mock_cipher)
 
-    from chrome_v20_decryption.v20_decryptor import get_v20_key
+    from modules.chrome_v20_decryption.v20_decryptor import get_v20_key
     fake_app_bound = base64.b64encode(b"APPB" + b"encrypted_key").decode()
     
     result = get_v20_key(fake_app_bound, mock_win32crypt)

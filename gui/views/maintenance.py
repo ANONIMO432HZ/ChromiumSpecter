@@ -376,9 +376,9 @@ class MaintenanceView(ctk.CTkFrame):
 
         # 1. Carpetas temporales conocidas en el proyecto
         targets = [
-            "build", "dist", "tmp", "temp", 
+            "build", "dist", "tmp", "temp", "test_output",
             ".pytest_cache", ".pyarmor", ".venv/target", 
-            "gui/__pycache__", "gui/views/__pycache__"
+            "gui/__pycache__", "gui/views/__pycache__", "modules/__pycache__"
         ]
         for t in targets:
             p = Path(t)
