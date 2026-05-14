@@ -143,3 +143,76 @@ def test_decrypt_mixed_profile_scenario(mocker):
 
     assert aes_result  == "aes_pass"
     assert dpapi_result == "dpapi_pass"
+
+# ── v20_decryptor ─────────────────────────────────────────────────────────────
+
+def test_v20_token_manager_revert_to_self(mocker):
+    """Verifica que RevertToSelf se llame siempre, incluso si Impersonate falla."""
+    mocker.patch("chrome_v20_decryption.v20_decryptor.get_winlogon_pid", return_value=1234)
+    mocker.patch("chrome_v20_decryption.v20_decryptor.OpenProcessToken", return_value=1)
+    mocker.patch("chrome_v20_decryption.v20_decryptor.LookupPrivilegeValueW", return_value=1)
+    mocker.patch("chrome_v20_decryption.v20_decryptor.AdjustTokenPrivileges", return_value=1)
+    mocker.patch("chrome_v20_decryption.v20_decryptor.kernel32.OpenProcess", return_value=1)
+    mocker.patch("chrome_v20_decryption.v20_decryptor.DuplicateTokenEx", return_value=1)
+    mocker.patch("chrome_v20_decryption.v20_decryptor.kernel32.CloseHandle")
+    
+    mock_impersonate = mocker.patch("chrome_v20_decryption.v20_decryptor.ImpersonateLoggedOnUser", return_value=0) # Fails
+    mock_revert = mocker.patch("chrome_v20_decryption.v20_decryptor.RevertToSelf")
+
+    from chrome_v20_decryption.v20_decryptor import TokenManager
+
+    try:
+        with TokenManager():
+            pass
+    except Exception as e:
+        assert "ImpersonateLoggedOnUser failed" in str(e)
+        
+    # RevertToSelf shouldn't be called if impersonated was False
+    mock_revert.assert_not_called()
+
+    mock_impersonate.return_value = 1 # Succeeds
+    try:
+        with TokenManager():
+            raise ValueError("Some internal error")
+    except ValueError:
+        pass
+        
+    mock_revert.assert_called_once()
+
+def test_get_v20_key_flag_3(mocker):
+    """Verifica el flujo doble DPAPI y XOR para flag 3."""
+    mocker.patch("chrome_v20_decryption.v20_decryptor.TokenManager.__enter__")
+    mocker.patch("chrome_v20_decryption.v20_decryptor.TokenManager.__exit__")
+    
+    mock_win32crypt = MagicMock()
+    # First unprotect returns fake system blob
+    # Second unprotect returns parsed data structure (header len 0, content len 0, flag 3, AES key 32b, IV 12b, cipher 32b, tag 16b)
+    
+    # 4 bytes header len, 0 bytes header
+    # 4 bytes content len
+    # 1 byte flag = 3
+    # 32 bytes encrypted_aes_key
+    # 12 bytes iv
+    # 32 bytes ciphertext
+    # 16 bytes tag
+    import struct
+    fake_parsed_blob = struct.pack('<I', 0) + struct.pack('<I', 93) + b'\x03' + (b'K' * 32) + (b'I' * 12) + (b'C' * 32) + (b'T' * 16)
+    
+    mock_win32crypt.CryptUnprotectData.side_effect = [
+        (None, b"system_decrypted"),
+        (None, fake_parsed_blob)
+    ]
+    
+    mocker.patch("chrome_v20_decryption.v20_decryptor.decrypt_with_cng", return_value=(b'D' * 32))
+    
+    mock_cipher = MagicMock()
+    mock_cipher.decrypt_and_verify.return_value = b"final_aes_master_key"
+    mocker.patch("Cryptodome.Cipher.AES.new", return_value=mock_cipher)
+
+    from chrome_v20_decryption.v20_decryptor import get_v20_key
+    fake_app_bound = base64.b64encode(b"APPB" + b"encrypted_key").decode()
+    
+    result = get_v20_key(fake_app_bound, mock_win32crypt)
+    
+    assert result == b"final_aes_master_key"
+    mock_cipher.decrypt_and_verify.assert_called_once_with(b'C' * 32, b'T' * 16)

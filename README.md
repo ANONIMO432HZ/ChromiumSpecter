@@ -32,11 +32,11 @@
 ### 🌟 Características Destacadas
 
 * **🖥️ Dashboard de Alta Densidad**: Interfaz gráfica profesional con consolas en tiempo real, estadísticas dinámicas y gestión de resultados.
-* **🔐 Motor de Descifrado Dual**:
-  * Soporte simultáneo para **AES-GCM (Chromium v80+)** y **DPAPI Legacy** en la misma base de datos de perfiles.
-  * Descifrado por blob individual — un perfil migrado puede tener entradas de ambos tipos y se procesan correctamente sin descartar nada.
-  * Detección automática del esquema por prefijo (`v10`/`v11`) con fallback inteligente a DPAPI si AES falla.
-  * Perfiles sin llave AES (Chrome antiguo) siguen procesándose en modo DPAPI puro.
+* **🔐 Motor de Descifrado de Nueva Generación (v20 Support)**:
+  * Soporte total para **Chrome v127+ (App-Bound Encryption)** mediante el nuevo módulo `v20_decryptor`.
+  * Descifrado híbrido: Soporta **AES-GCM (v10/v11)**, **DPAPI Legacy** y el nuevo esquema **v20** en la misma base de datos.
+  * **Escalada de Privilegios**: Implementa impersonación nativa de SYSTEM (vía `winlogon.exe`) para extraer llaves protegidas por el sistema. **(Requiere ejecutar como Administrador)**.
+  * Detección inteligente: El motor identifica el prefijo (`v10`, `v11`, `v20`) y aplica el algoritmo correspondiente con fallback automático.
 * **🕵️ Motor de Sigilo (Tactical Stealth)**:
   * **Startup Delay**: Selector de retraso inicial (0-300s) para evadir análisis en Sandboxes.
   * **Inter-file Delay (`send_delay`)**: Pausas personalizables entre envíos para prevenir picos de tráfico que alerten a firewalls o EDRs.
@@ -79,6 +79,9 @@ Generación de stubs personalizados con **Inyección Dinámica** de parámetros.
 ## 🖥️ Uso Avanzado (CLI)
 
 El motor principal (`main.py`) puede ejecutarse de forma independiente sin la interfaz gráfica, ideal para automatizaciones o despliegues rápidos via terminal.
+
+> [!IMPORTANT]
+> **REQUERIMIENTO DE PRIVILEGIOS**: Para descifrar perfiles de **Chrome v127+ (V20)**, es **OBLIGATORIO** ejecutar la terminal (o el `.exe`) con **privilegios de Administrador**. Sin estos privilegios, el motor no podrá realizar la impersonación de SYSTEM necesaria para acceder al almacén de llaves CNG.
 
 ```bash
 # Auditoría básica
@@ -145,11 +148,11 @@ Al usar el **Builder**, puedes inyectar los siguientes comportamientos en tu bin
 | Componente | Tecnología |
 | :--- | :--- |
 | **Core UI** | `CustomTkinter` (Modern Dark Theme) |
-| **Criptografía** | `AES-GCM 256` via `PyCryptodomex` + `Windows DPAPI` |
+| **Criptografía** | `v20 (App-Bound)`, `AES-GCM 256` via `PyCryptodomex` + `Windows DPAPI` |
 | **Seguridad OS** | `Win32 API` (`CryptUnprotectData`, `ShowWindow`) |
 | **Compilación** | `PyInstaller` + `PyArmor` + `UPX` |
 | **Persistencia** | `JSON` Local (`.audit/exfil_config.json`) |
-| **Testing** | `pytest` + `pytest-mock` (18 tests, 0 fallos) |
+| **Testing** | `pytest` + `pytest-mock` (20 tests, 0 fallos) |
 
 ---
 
