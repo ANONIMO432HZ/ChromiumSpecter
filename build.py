@@ -1,3 +1,19 @@
+# 🛡️ ChromiumSpecter — Tactical Auditor Suite
+# Copyright (C) 2026 ANONIMO432HZ
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://fsf.org/licenses/>.
+
 import os
 import sys
 import subprocess
@@ -83,7 +99,7 @@ VSVersionInfo(
     return path
 
 def get_dynamic_imports():
-    """Analiza requirements.txt y devuelve lista de modulos para PyInstaller."""
+    """Analiza requirements.txt y main.py y devuelve lista de modulos para PyInstaller."""
     translation = {
         "pycryptodomex": "Cryptodome",
         "pywin32": "win32crypt",
@@ -91,7 +107,25 @@ def get_dynamic_imports():
         "pyinstaller": "PyInstaller"
     }
     # Dependencias core necesarias para el Builder autónomo y módulos internos dinámicos
-    hidden = ["pyarmor.cli", "modules.chrome_v20_decryption.v20_decryptor"] 
+    hidden = ["pyarmor.cli", "modules.chrome_v20_decryption.v20_decryptor"]
+    
+    # 1. Parsear dependencias estándar desde main.py
+    import re
+    if os.path.exists("main.py"):
+        with open("main.py", "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("import "):
+                    hidden.extend(line.replace("import ", "").split(","))
+                elif line.startswith("from "):
+                    match = re.match(r"^from\s+([a-zA-Z0-9_.]+)\s+import", line)
+                    if match:
+                        hidden.append(match.group(1))
+    
+    # Limpiar espacios en los imports extraídos de main.py
+    hidden = [h.strip() for h in hidden if h.strip()]
+
+    # 2. Parsear dependencias externas desde requirements.txt
     try:
         if os.path.exists("requirements.txt"):
             with open("requirements.txt", "r", encoding="utf-8") as f:

