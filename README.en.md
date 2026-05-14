@@ -1,4 +1,4 @@
-# 🛡️ ChromiumSpecter Auditor Suite `v2.0.0` (V20 Update)
+# 🛡️ ChromiumSpecter Auditor Suite `v2.5.0` (V20 Update)
 
 > [!NOTE]
 > **English Version** | [Versión en Español](README.md)
