@@ -105,14 +105,43 @@ PROCESS_QUERY_INFORMATION = 0x0400
 NCRYPT_SILENT_FLAG = 0x40
 
 def get_winlogon_pid() -> int:
-    try:
-        output = subprocess.check_output('tasklist /FI "IMAGENAME eq winlogon.exe" /NH /FO CSV', shell=True, stderr=subprocess.DEVNULL).decode()
-        parts = output.strip().split(',')
-        if len(parts) > 1:
-            return int(parts[1].strip('"'))
-    except Exception as e:
-        logger.debug(f"Error getting winlogon pid: {e}")
-    return 0
+    TH32CS_SNAPPROCESS = 0x00000002
+    class PROCESSENTRY32(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.POINTER(wintypes.ULONG)),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", wintypes.LONG),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", ctypes.c_char * 260)
+        ]
+    
+    hProcessSnap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+    if not hProcessSnap or hProcessSnap == -1:
+        return 0
+    
+    pe32 = PROCESSENTRY32()
+    pe32.dwSize = ctypes.sizeof(PROCESSENTRY32)
+    
+    if not kernel32.Process32First(hProcessSnap, ctypes.byref(pe32)):
+        kernel32.CloseHandle(hProcessSnap)
+        return 0
+        
+    pid = 0
+    while True:
+        exe_name = pe32.szExeFile.decode('utf-8', 'ignore').lower()
+        if exe_name == "winlogon.exe":
+            pid = pe32.th32ProcessID
+            break
+        if not kernel32.Process32Next(hProcessSnap, ctypes.byref(pe32)):
+            break
+            
+    kernel32.CloseHandle(hProcessSnap)
+    return pid
 
 class TokenManager:
     """Context manager for elevating to SYSTEM by impersonating winlogon.exe"""
