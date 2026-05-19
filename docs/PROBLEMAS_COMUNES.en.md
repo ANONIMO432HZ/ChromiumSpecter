@@ -1,6 +1,6 @@
 # Common Troubleshooting (English)
 
-This document outlines frequent issues encountered during the build and obfuscation of the project and how to resolve them.
+This document outlines frequent issues encountered during the build, obfuscation, and execution of the project, and how to resolve them.
 
 ---
 
@@ -207,20 +207,29 @@ pip install --force-reinstall Pillow
 
 ---
 
-## 12. Chrome shows "Not Decrypted" (App-Bound Encryption v20)
+## 12. Support and Troubleshooting for App-Bound Encryption v20 (Chrome, Edge, Brave)
 
 ### Symptom
-In recent versions of Chrome (127+), all passwords appear as `[Not Decrypted]`, while other browsers like Edge or Brave (if not updated) show them correctly.
+On recent versions of Chromium-based browsers (Chrome 127+, Edge 127+, Brave 130+), recovered credentials might show `[Not Decrypted]` or output specific logs like:
+- `Unsupported flag: 232` / `Unsupported flag: 233`
+- `OpenProcess on winlogon.exe failed (Access Denied)`
+- `Failed to decrypt CNG blob with any known browser key`
 
-### Cause
-Starting with **Chrome 127** (July 2024), Google introduced **App-Bound Encryption**. Passwords now use the **`v20`** prefix instead of the classic `v10`.
-- **v10/v11**: Uses an AES key encrypted with DPAPI. Any user process can ask Windows to decrypt it.
-- **v20**: The key is tied to the identity of the `chrome.exe` executable. Google uses a Windows service (`Chrome Elevation Service`) that verifies the entity requesting decryption is the legitimate browser.
+### Technical Cause and V20 Architecture
+Starting with Chromium 127+, Google introduced **App-Bound Encryption (ABE)**. Passwords and cookies now use the **`v20`** blob prefix (instead of `v10` or `v11`). 
+The suite **implements native and complete support for decrypting V20** via a three-phase architecture:
 
-### How to verify your version
-1. In Chrome, go to `chrome://version`.
-2. If the version is **127.x** or higher, you are almost certainly using `v20`.
-3. You can verify the blobs directly in the database: if they start with the bytes `76 32 30` (ASCII: `v20`), it is the new encryption.
+1. **Token Impersonation (SYSTEM)**: The suite locates `winlogon.exe`, duplicates its security token (`SYSTEM`), and impersonates it to acquire the necessary machine cryptographic privileges required to invoke Windows' DPAPI.
+2. **DPAPI Encrypted Layer Decryption**: Standard and system-level `CryptUnprotectData` API calls are chained to decrypt the wrapper.
+3. **Key Mapping & CNG Decryption**: 
+   - **Chrome / Edge**: Use keys stored in the system's Microsoft Software Key Storage Provider (CNG) named `Google Chromekey1` and `Microsoft Edgekey1`. Decryption is orchestrated using `ctypes` coupled with a proprietary XOR mask.
+   - **Brave (v130+)**: Implements a streamlined security approach. Once the DPAPI layer is stripped, the payload contains the raw **32-byte** AES-256 master key directly (identified by flag `'direct'` / initial byte `232` or `0xE8`), requiring no COM elevation service or XOR steps.
 
-### Solution
-Currently, decrypting `v20` from external processes is extremely complex as it requires code injection into the Chrome process or interacting with the elevation service under specific conditions. The suite detects these blobs but cannot decrypt them due to limitations imposed by the Operating System and process identity.
+### Common Troubleshooting and Diagnosis
+
+| Error / Symptom | Cause | Solution |
+| :--- | :--- | :--- |
+| `OpenProcess on winlogon.exe failed` | The script is running without high-integrity privileges required to access system-level handles. | **Run the main script (`main.py` or compiled `.exe`) as Administrator.** (Right-click -> Run as Administrator). |
+| `Unsupported flag: 232` | An older suite version is running, lacking support for Brave's direct 32-byte key parser. | Update the suite. The current parser automatically detects 32-byte payloads or direct flags and extracts the final key on the fly. |
+| `Failed to decrypt CNG blob...` | The CNG encryption keys or database belongs to a different Windows user profile. | Make sure you are auditing the real user profile that initialized the Windows active session. |
+| `[Not Decrypted]` with Admin privileges | The `ChromeElevationService` or `BraveElevationService` is not correctly registered or running. | Open Windows Services (`services.msc`) and verify that the target browser's elevation service is enabled and set to `Manual` startup type. |

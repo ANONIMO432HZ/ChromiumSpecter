@@ -34,7 +34,7 @@ import multiprocessing
 from pathlib import Path
 from datetime import datetime
 
-__version__ = "2.5.0"
+__version__ = "2.6.0"
 
 # =========================================================================
 # CONFIGURACIÓN CORE (Accesible para el Builder/GUI)
@@ -135,6 +135,7 @@ HTML_TEMPLATE = """
         .chrome { background-color: #fcc117; color: #1e1e1e; }
         .edge { background-color: #0078d7; color: white; }
         .brave { background-color: #ff4500; color: white; box-shadow: 0 2px 4px rgba(255, 69, 0, 0.2); }
+        .vivaldi { background-color: #ef382b; color: white; box-shadow: 0 2px 4px rgba(239, 56, 43, 0.25); }
         .opera { background-color: #cc0f35; color: white; }
         .opera-gx { background-color: #1a1a1a; color: #ff0055; border: 1px solid #ff0055; box-shadow: 0 0 5px rgba(255, 0, 85, 0.4); font-family: 'Consolas', monospace; }
         .footer { margin-top: 20px; font-size: 0.9em; color: #777; text-align: center; }

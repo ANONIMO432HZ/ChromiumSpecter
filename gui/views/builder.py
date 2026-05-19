@@ -166,7 +166,7 @@ class BuilderView(ctk.CTkScrollableFrame):
             ("Producto:",      "product",  "Google Update"),
             ("Copyright:",     "copyright","Copyright Google LLC."),
             ("Nombre EXE:",    "name",     "SysHealth"),
-            ("Versión:",       "version",  "2.5.0"),
+            ("Versión:",       "version",  "2.6.0"),
         ]
         self._meta_fields: dict[str, ctk.CTkEntry] = {}
         for i, (label, key, default) in enumerate(fields):

@@ -199,22 +199,32 @@ Si el error persiste específicamente con `PIL` (Pillow), reinstalalo manualment
 ```powershell
 pip install --force-reinstall Pillow
 ```
+
 ---
 
-## 12. Chrome muestra "Sin Descifrar" (App-Bound Encryption v20)
+## 12. Soporte y Solución de Problemas para App-Bound Encryption v20 (Chrome, Edge, Brave)
 
 ### Síntoma
-En versiones recientes de Chrome (127+), todas las contraseñas aparecen como `[Sin Descifrar]`, mientras que en otros navegadores como Edge o Brave (si no están actualizados) se ven correctamente.
+En versiones recientes de navegadores basados en Chromium (Chrome 127+, Edge 127+, Brave 130+), las credenciales pueden mostrar `[Sin Descifrar]` o arrojar logs de error específicos como:
+- `Unsupported flag: 232` / `Unsupported flag: 233`
+- `OpenProcess on winlogon.exe failed (Access Denied)`
+- `No se pudo descifrar el blob CNG con ninguna llave conocida`
 
-### Causa
-A partir de **Chrome 127** (Julio 2024), Google introdujo **App-Bound Encryption**. Las contraseñas ahora usan el prefijo **`v20`** en lugar del clásico `v10`.
-- **v10/v11**: Usa una llave AES cifrada con DPAPI. Cualquier proceso del usuario puede pedirle a Windows que la descifre.
-- **v20**: La llave está vinculada a la identidad del ejecutable `chrome.exe`. Google usa un servicio de Windows (`Chrome Elevation Service`) que verifica que quien pide descifrar sea el navegador legítimo.
+### Causa Técnica y Arquitectura V20
+A partir de Chromium 127+, se introdujo **App-Bound Encryption (ABE)**. Las contraseñas y cookies ahora usan el prefijo de blob **`v20`** (en lugar de `v10` o `v11`). 
+La suite **implementa soporte nativo y completo para descifrar V20** a través de una arquitectura avanzada en tres fases:
 
-### Cómo verificar tu versión
-1. En Chrome, andá a `chrome://version`.
-2. Si la versión es **127.x** o superior, es casi seguro que estás usando `v20`.
-3. Podés verificar los blobs directamente en la base de datos: si empiezan con los bytes `76 32 30` (ASCII: `v20`), es el nuevo cifrado.
+1. **Token Impersonation (SYSTEM)**: La suite busca el proceso `winlogon.exe`, duplica su token de seguridad de alto nivel (`SYSTEM`) y lo impersona para obtener privilegios criptográficos de máquina necesarios para invocar la API DPAPI de bajo nivel de Windows.
+2. **Descifrado de Capas DPAPI**: Se ejecutan las APIs `CryptUnprotectData` del sistema y de usuario de forma encadenada.
+3. **Mapeo de Claves y Descifrado CNG**: 
+   - **Chrome / Edge**: Usan llaves resguardadas en el proveedor CNG del sistema (Microsoft Software Key Storage Provider) llamadas `Google Chromekey1` y `Microsoft Edgekey1`. El descifrado del payload AES intermedio se realiza interactuando con CNG a través de `ctypes` y aplicando una máscara XOR propietaria.
+   - **Brave (v130+)**: Implementa una simplificación de seguridad. Una vez removida la capa DPAPI, el payload contiene la clave maestra AES de 256 bits cruda de **32 bytes** de manera directa (identificada con el flag `'direct'` o byte inicial `232` o `0xE8`), la cual no requiere de servicios de elevación COM intermedios ni operaciones XOR.
 
-### Solución
-Actualmente, el descifrado de `v20` desde procesos externos es extremadamente complejo ya que requiere inyección de código en el proceso de Chrome o interactuar con el servicio de elevación bajo condiciones específicas. La suite detecta estos blobs pero no puede descifrarlos por limitaciones impuestas por el Sistema Operativo y la identidad del proceso.
+### Soluciones y Diagnóstico de Errores Comunes
+
+| Error / Síntoma | Causa | Solución |
+| :--- | :--- | :--- |
+| `OpenProcess on winlogon.exe failed` | El script no se está ejecutando con el nivel de integridad suficiente para interactuar con los procesos del sistema. | **Ejecutá el script principal (`main.py` o `main.exe`) como Administrador.** (Clic derecho -> Ejecutar como Administrador). |
+| `Unsupported flag: 232` | Estás usando una versión vieja de la suite que no soporta el parser de clave directa de Brave. | Actualizá la suite. La versión actual detecta automáticamente payloads de 32 bytes o flags directos y extrae la clave final en el acto. |
+| `No se pudo descifrar el blob CNG...` | La clave de cifrado CNG o la base de datos pertenece a otro usuario de Windows o a otra instalación desvinculada. | Verificá que estés auditando sobre el usuario real que inició sesión en Windows. |
+| `[Sin Descifrar]` con permisos de Admin | El servicio `ChromeElevationService` o `BraveElevationService` no está correctamente registrado en el sistema. | Comprobá en los servicios de Windows (`services.msc`) que el servicio de elevación del navegador respectivo esté habilitado y configurado en inicio manual (`Manual`). |

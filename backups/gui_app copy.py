@@ -62,7 +62,7 @@ class App(ctk.CTk):
         super().__init__()
 
         # Window Config
-        self.title("ChromiumSpecter — Tactical Auditor Suite v2.5.0")
+        self.title("ChromiumSpecter — Tactical Auditor Suite v2.6.0")
         self.after(0, lambda: self.state('zoomed')) # Full screen on start
         self.minsize(1100, 750)
         
@@ -130,7 +130,7 @@ class App(ctk.CTk):
         admin_color = COLORS["danger"] if is_admin else COLORS["warning"]
         
         make_label(footer_frame, admin_text, style="tiny", color=admin_color).pack()
-        make_label(footer_frame, "v2.5.0-PRO (V20 Stable)", style="tiny", color=COLORS["text_muted"]).pack()
+        make_label(footer_frame, "v2.6.0-PRO (V20 Stable)", style="tiny", color=COLORS["text_muted"]).pack()
 
     def _build_main_container(self):
         self._views_container = ctk.CTkFrame(self, fg_color=COLORS["bg_root"], corner_radius=0)

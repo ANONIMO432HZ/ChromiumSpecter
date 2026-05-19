@@ -217,3 +217,30 @@ def test_get_v20_key_flag_3(mocker):
     
     assert result == b"final_aes_master_key"
     mock_cipher.decrypt_and_verify.assert_called_once_with(b'C' * 32, b'T' * 16)
+
+def test_get_v20_key_flag_direct_brave(mocker):
+    import base64
+    from unittest.mock import MagicMock
+    mocker.patch("modules.chrome_v20_decryption.v20_decryptor.TokenManager.__enter__")
+    mocker.patch("modules.chrome_v20_decryption.v20_decryptor.TokenManager.__exit__")
+    
+    mock_win32crypt = MagicMock()
+    
+    # Simula el exacto FullHex de Brave:
+    # 2d00000002433a5c50726f6772616d2046696c65735c4272617665536f6674776172655c42726176652d42726f7773657220000000e8779eb7019dda48c490b0bf9cec15638e96df44de7f175fa7b953e59f4ad0de
+    brave_full_hex = "2d00000002433a5c50726f6772616d2046696c65735c4272617665536f6674776172655c42726176652d42726f7773657220000000e8779eb7019dda48c490b0bf9cec15638e96df44de7f175fa7b953e59f4ad0de"
+    fake_parsed_blob = bytes.fromhex(brave_full_hex)
+    
+    mock_win32crypt.CryptUnprotectData.side_effect = [
+        (None, b"system_decrypted"),
+        (None, fake_parsed_blob)
+    ]
+    
+    from modules.chrome_v20_decryption.v20_decryptor import get_v20_key
+    fake_app_bound = base64.b64encode(b"APPB" + b"encrypted_key").decode()
+    
+    result = get_v20_key(fake_app_bound, mock_win32crypt)
+    
+    expected_key = bytes.fromhex("e8779eb7019dda48c490b0bf9cec15638e96df44de7f175fa7b953e59f4ad0de")
+    assert result == expected_key
+

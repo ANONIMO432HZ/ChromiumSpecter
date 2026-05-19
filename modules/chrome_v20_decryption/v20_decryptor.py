@@ -266,12 +266,18 @@ def parse_key_blob(blob_data: bytes) -> dict:
     
     # Diagnóstico de estructura
     if len(blob_data) == 32:
-        raise ValueError("Blob is exactly 32 bytes (Raw AES key?)")
+        return {'flag': 'direct', 'raw_key': blob_data}
         
     try:
         header_len = struct.unpack('<I', buffer.read(4))[0]
         parsed_data['header'] = buffer.read(header_len)
         content_len = struct.unpack('<I', buffer.read(4))[0]
+        
+        if content_len == 32:
+            parsed_data['flag'] = 'direct'
+            parsed_data['raw_key'] = buffer.read(32)
+            return parsed_data
+            
         parsed_data['flag'] = buffer.read(1)[0]
     except Exception as e:
         hex_dump = blob_data[:16].hex()
@@ -287,8 +293,8 @@ def parse_key_blob(blob_data: bytes) -> dict:
         parsed_data['ciphertext'] = buffer.read(32)
         parsed_data['tag'] = buffer.read(16)
     else:
-        hex_dump = blob_data[:16].hex()
-        raise ValueError(f"Unsupported flag: {parsed_data['flag']} | Len: {len(blob_data)} | HexStart: {hex_dump}")
+        full_hex = blob_data.hex()
+        raise ValueError(f"Unsupported flag: {parsed_data['flag']} | Len: {len(blob_data)} | FullHex: {full_hex}")
 
     return parsed_data
 
@@ -296,6 +302,9 @@ def byte_xor(ba1: bytes, ba2: bytes) -> bytes:
     return bytes([_a ^ _b for _a, _b in zip(ba1, ba2)])
 
 def derive_v20_master_key(parsed_data: dict) -> bytes | None:
+    if parsed_data['flag'] == 'direct':
+        return parsed_data['raw_key']
+
     if parsed_data['flag'] == 1:
         aes_key = bytes.fromhex("B31C6E241AC846728DA9C1FAC4936651CFFB944D143AB816276BCC6DA0284787")
         if not AES: raise ImportError("Cryptodome is required for flag 1")

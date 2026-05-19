@@ -185,7 +185,7 @@ Ejemplos de uso:
                             help="Aplica un perfil de metadatos predefinido para rapidez.")
     meta_group.add_argument("--company", help="Nombre de la empresa (ej: Microsoft).")
     meta_group.add_argument("--desc", help="Descripción del archivo.")
-    meta_group.add_argument("--version", default="2.5.0.0", help="Versión del archivo (ej: 1.0.0.0).")
+    meta_group.add_argument("--version", default="2.6.0.0", help="Versión del archivo (ej: 1.0.0.0).")
     meta_group.add_argument("--copyright", help="Copyright legal.")
     meta_group.add_argument("--product", help="Nombre del producto.")
     
