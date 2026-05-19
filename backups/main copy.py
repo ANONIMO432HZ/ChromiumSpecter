@@ -34,7 +34,7 @@ import multiprocessing
 from pathlib import Path
 from datetime import datetime
 
-__version__ = "1.4.0"
+__version__ = "2.5.0"
 
 # =========================================================================
 # CONFIGURACIÓN CORE (Accesible para el Builder/GUI)
